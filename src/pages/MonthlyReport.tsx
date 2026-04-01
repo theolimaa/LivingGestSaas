@@ -66,6 +66,8 @@ export default function MonthlyReport() {
   const filtered = enriched.filter(r => {
     // Exclui registros cujo período de referência é anterior a 2026
     if (r.month < '2026-01') return false;
+    // Registros nao pagos de contratos encerrados nao devem aparecer no relatório
+    if (!r.paid && r.contract?.status === 'ended') return false;
 
     if (selectedCondo !== 'all') {
       if (r.apt?.condominium_id !== selectedCondo) return false;
