@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { formatCurrency, getRecordStatus } from '@/lib/utils-app';
+import { formatCurrency, getRecordStatus, getPeriodAndDueDate } from '@/lib/utils-app';
 import { useApp } from '@/lib/store';
 import GlobalFilter from '@/components/GlobalFilter';
 import Layout from '@/components/Layout';
@@ -135,11 +135,15 @@ function ApartmentCard({
  
   const overdue = allFinancialRecords.some(r => {
     if (r.apartment_id !== apt.id || r.paid) return false;
-    const [y, m] = r.month.split('-').map(Number);
-    if (!(y === selectedYear && (selectedMonth === null || m - 1 === selectedMonth)))
-      return false;
     const contract = contracts.find(c => c.id === r.contract_id);
-    return getRecordStatus(r.month, contract?.payment_day) === 'overdue';
+    // Contratos encerrados nao contam como inadimplentes
+    if (contract?.status === 'ended') return false;
+    // Filtrar pela data de VENCIMENTO (nao por r.month), igual ao Financial e Dashboard
+    const { dueDateStr } = getPeriodAndDueDate(r.month, contract?.start_date ?? null, contract?.payment_day ?? 1);
+    if (!dueDateStr || dueDateStr === '-') return false;
+    const [y, m] = dueDateStr.split('-').map(Number);
+    if (!(y === selectedYear && (selectedMonth === null || m - 1 === selectedMonth))) return false;
+    return getRecordStatus(r.month, contract?.payment_day, contract?.start_date) === 'overdue';
   });
  
   return (
@@ -384,4 +388,3 @@ export default function CondominiumDetail() {
     </Layout>
   );
 }
- 
