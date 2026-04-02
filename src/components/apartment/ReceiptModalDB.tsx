@@ -118,6 +118,7 @@ export default function ReceiptModalDB({
     let mainStr = `Recebi de ${tenant.first_name} ${tenant.last_name}, CPF ${tenant.cpf || '—'} a importância de: ${paidFormatted} referente ao aluguel para o período de ${periodLabel}.`;
     if (record.paid) mainStr += ` Forma de pagamento: ${method}.`;
     if (owed > 0) mainStr += ` Saldo devedor: ${formatCurrency(owed)}.`;
+    if (record.observations) mainStr += ` Obs: ${record.observations}.`;
 
     setTitle(`RECIBO — APTO ${apartment.unit_number} — ${tenant.first_name} ${tenant.last_name} — ${today}`);
     setMainText(mainStr);
