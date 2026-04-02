@@ -85,6 +85,7 @@ export default function ReceiptModalDB({
   const [title, setTitle] = useState('');
   const [mainText, setMainText] = useState('');
   const [cautionLine, setCautionLine] = useState('');
+  const [observationsLine, setObservationsLine] = useState('');
   const [historyTitle, setHistoryTitle] = useState('');
   const [footer, setFooter] = useState('');
 
@@ -118,11 +119,11 @@ export default function ReceiptModalDB({
     let mainStr = `Recebi de ${tenant.first_name} ${tenant.last_name}, CPF ${tenant.cpf || '—'} a importância de: ${paidFormatted} referente ao aluguel para o período de ${periodLabel}.`;
     if (record.paid) mainStr += ` Forma de pagamento: ${method}.`;
     if (owed > 0) mainStr += ` Saldo devedor: ${formatCurrency(owed)}.`;
-    if (record.observations) mainStr += ` Obs: ${record.observations}.`;
 
     setTitle(`RECIBO — APTO ${apartment.unit_number} — ${tenant.first_name} ${tenant.last_name} — ${today}`);
     setMainText(mainStr);
     setCautionLine(cautionText);
+    setObservationsLine(record.observations ?? '');
     setHistoryTitle(`Histórico do Ano ${recYear}`);
     setFooter(`Fortaleza, ${today} — ${adminName} — Confira seu recibo.`);
   }, [open]);
@@ -162,6 +163,7 @@ export default function ReceiptModalDB({
     addLine(); y += 2;
     addText(mainText, 10);
     if (cautionLine) { y += 2; addText(cautionLine, 10); }
+    if (observationsLine) { y += 2; addText(`Obs: ${observationsLine}`, 10); }
     y += 4; addLine();
     addText(historyTitle, 11, true); y += 2;
 
@@ -260,6 +262,13 @@ export default function ReceiptModalDB({
           {(cautionLine || contract?.caution_paid) && (
             <div className="text-sm">
               <EditableText value={cautionLine} onChange={setCautionLine} multiline className="w-full" />
+            </div>
+          )}
+
+          {observationsLine && (
+            <div className="text-sm text-muted-foreground">
+              <span className="font-semibold text-foreground">Obs:</span>{' '}
+              <EditableText value={observationsLine} onChange={setObservationsLine} className="w-full" />
             </div>
           )}
 
