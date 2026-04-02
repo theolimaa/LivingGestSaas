@@ -129,9 +129,10 @@ export function useSaveReceipt() {
       qc.invalidateQueries({ queryKey: ['saved_receipts'] });
       toast.success('Recibo salvo em Recibos!');
     },
-    onError: (e: Error) => {
+    onError: (e: unknown) => {
+      const msg = (e && typeof e === 'object' && 'message' in e) ? (e as any).message : String(e);
       console.error('Erro ao salvar recibo:', e);
-      toast.error('Não foi possível salvar o recibo.');
+      toast.error(`Erro ao salvar recibo: ${msg}`, { duration: 10000 });
     },
   });
 }
