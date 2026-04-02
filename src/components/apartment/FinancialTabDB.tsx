@@ -68,6 +68,8 @@ export default function FinancialTabDB({ apartmentId, tenantId, tenantName, tena
     date: string;
     paidAmount: string;
     method: PaymentMethod;
+    isDebt: boolean;        // true = fica devendo a diferença
+    observations: string;   // acordo ou observação livre
   } | null>(null);
 
   // Modal de registro de dívida (pagamento posterior do saldo)
@@ -120,6 +122,8 @@ export default function FinancialTabDB({ apartmentId, tenantId, tenantName, tena
       date: new Date().toISOString().split('T')[0],
       paidAmount: String(record.rent_value),
       method: 'pix',
+      isDebt: true,
+      observations: record.observations ?? '',
     });
   }
 
@@ -127,12 +131,24 @@ export default function FinancialTabDB({ apartmentId, tenantId, tenantName, tena
   async function confirmPayment() {
     if (!paymentModal) return;
     const paidAmt = parseFloat(paymentModal.paidAmount) || 0;
+    const isPartial = paidAmt < paymentModal.record.rent_value && paidAmt > 0;
+    // Se nao fica devendo e pagamento foi parcial: salva paid_amount = rent_value
+    // (acordo fechado — sem débito) e registra o valor real na observacao
+    const effectivePaidAmount = isPartial && !paymentModal.isDebt
+      ? paymentModal.record.rent_value
+      : paidAmt;
+    let obs = paymentModal.observations.trim();
+    if (isPartial && !paymentModal.isDebt && paidAmt > 0) {
+      const discountNote = `Acordo: pagamento de ${formatCurrency(paidAmt)} aceito como quitação.`;
+      obs = obs ? `${obs} — ${discountNote}` : discountNote;
+    }
     await upsert.mutateAsync({
       ...paymentModal.record,
       paid: true,
       payment_date: paymentModal.date || new Date().toISOString().split('T')[0],
-      paid_amount: paidAmt,
+      paid_amount: effectivePaidAmount,
       payment_method: paymentModal.method,
+      observations: obs || null,
       status: 'Pago',
     });
     setPaymentModal(null);
@@ -349,11 +365,36 @@ export default function FinancialTabDB({ apartmentId, tenantId, tenantName, tena
                 value={paymentModal?.paidAmount ?? ''}
                 onChange={e => setPaymentModal(prev => prev ? { ...prev, paidAmount: e.target.value } : null)}
               />
+              {/* Aviso + toggle de dívida quando pagamento é parcial */}
               {paymentModal && parseFloat(paymentModal.paidAmount) < paymentModal.record.rent_value && parseFloat(paymentModal.paidAmount) > 0 && (
-                <p className="text-xs mt-1 flex items-center gap-1" style={{ color: 'hsl(var(--overdue))' }}>
-                  <AlertTriangle className="w-3 h-3" />
-                  Ficará devendo {formatCurrency(paymentModal.record.rent_value - parseFloat(paymentModal.paidAmount))}
-                </p>
+                <div className="mt-2 space-y-2">
+                  <div
+                    className="flex items-center justify-between rounded-lg px-3 py-2 border"
+                    style={{
+                      background: paymentModal.isDebt ? 'hsl(var(--overdue) / 0.06)' : 'hsl(var(--paid) / 0.06)',
+                      borderColor: paymentModal.isDebt ? 'hsl(var(--overdue) / 0.3)' : 'hsl(var(--paid) / 0.3)',
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" style={{ color: paymentModal.isDebt ? 'hsl(var(--overdue))' : 'hsl(var(--paid))' }} />
+                      <span className="text-xs font-medium" style={{ color: paymentModal.isDebt ? 'hsl(var(--overdue))' : 'hsl(var(--paid))' }}>
+                        {paymentModal.isDebt
+                          ? `Ficará devendo ${formatCurrency(paymentModal.record.rent_value - parseFloat(paymentModal.paidAmount))}`
+                          : `Acordo: quitado por ${formatCurrency(parseFloat(paymentModal.paidAmount))}`}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentModal(prev => prev ? { ...prev, isDebt: !prev.isDebt } : null)}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ${paymentModal.isDebt ? 'bg-destructive' : 'bg-green-500'}`}
+                    >
+                      <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${paymentModal.isDebt ? 'translate-x-1' : 'translate-x-4'}`} />
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground px-1">
+                    {paymentModal.isDebt ? 'Desative para registrar como acordo (sem dívida).' : 'Ative para registrar a diferença como dívida.'}
+                  </p>
+                </div>
               )}
             </div>
 
@@ -386,6 +427,18 @@ export default function FinancialTabDB({ apartmentId, tenantId, tenantName, tena
                 className="mt-1"
                 value={paymentModal?.date ?? ''}
                 onChange={e => setPaymentModal(prev => prev ? { ...prev, date: e.target.value } : null)}
+              />
+            </div>
+
+            {/* Observação */}
+            <div>
+              <Label>Observação <span className="text-muted-foreground font-normal">(opcional)</span></Label>
+              <Input
+                className="mt-1"
+                maxLength={120}
+                placeholder="Ex: desconto combinado, pagamento antecipado..."
+                value={paymentModal?.observations ?? ''}
+                onChange={e => setPaymentModal(prev => prev ? { ...prev, observations: e.target.value } : null)}
               />
             </div>
           </div>
