@@ -40,19 +40,24 @@ export interface FinancialRecordDB {
 }
 
 /** Saldo devedor = diferença entre valor do contrato e o que foi pago.
- *  Só existe quando paid=true mas o valor pago foi parcial.
- *  Registros não pagos (pending/overdue) retornam 0 — eles já aparecem em A Receber ou Inadimplente. */
+ *  Retorna 0 quando:
+ *  - Registro não pago (aparece em A Receber ou Inadimplente)
+ *  - Pagamento foi marcado como "acordo" (debt_payment_method = 'acordo')
+ *    → proprietário aceitou valor parcial como quitação, sem gerar dívida */
 export function calcOwed(r: FinancialRecordDB): number {
-  if (!r.paid) return 0; // não pagou → não é "devendo", é inadimplente ou a receber
-  const paid = r.paid_amount ?? r.rent_value; // retrocompat: sem paid_amount assume pago completo
+  if (!r.paid) return 0;
+  if (r.debt_payment_method === 'acordo') return 0; // acordo fechado — sem dívida
+  const paid = r.paid_amount ?? r.rent_value;
   const debtPaid = r.debt_paid_amount ?? 0;
   return Math.max(0, r.rent_value - paid - debtPaid);
 }
 
-/** Valor total efetivamente recebido de um registro */
+/** Valor total efetivamente recebido de um registro.
+ *  Em caso de acordo, retorna o valor real pago (não o valor do contrato). */
 export function calcReceived(r: FinancialRecordDB): number {
   if (!r.paid) return 0;
   const paid = r.paid_amount ?? r.rent_value;
+  if (r.debt_payment_method === 'acordo') return paid; // valor real pago no acordo
   const debtPaid = r.debt_paid_amount ?? 0;
   return Math.min(r.rent_value, paid + debtPaid);
 }
