@@ -132,12 +132,16 @@ export default function ReceiptModalDB({
   function getRowPaid(r: FinancialRecordDB) {
     if (!r.paid) return 0;
     const paidAmt = editablePaidAmounts[r.id] ?? r.paid_amount ?? r.rent_value;
+    // Acordo: retorna o valor real pago (sem somar debtPaid, sem cap no rent_value)
+    if (r.debt_payment_method === 'acordo') return paidAmt;
     const debtPaid = r.debt_paid_amount ?? 0;
     return Math.min(editableValues[r.id] ?? r.rent_value, paidAmt + debtPaid);
   }
   function getRowOwed(r: FinancialRecordDB) {
     const val = editableValues[r.id] ?? r.rent_value;
     if (!r.paid) return val;
+    // Acordo fechado: proprietário aceitou valor parcial como quitação — sem dívida
+    if (r.debt_payment_method === 'acordo') return 0;
     const paidAmt = editablePaidAmounts[r.id] ?? r.paid_amount ?? r.rent_value;
     const debtPaid = r.debt_paid_amount ?? 0;
     return Math.max(0, val - paidAmt - debtPaid);
