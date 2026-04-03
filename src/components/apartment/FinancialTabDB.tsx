@@ -132,23 +132,18 @@ export default function FinancialTabDB({ apartmentId, tenantId, tenantName, tena
     if (!paymentModal) return;
     const paidAmt = parseFloat(paymentModal.paidAmount) || 0;
     const isPartial = paidAmt < paymentModal.record.rent_value && paidAmt > 0;
-    // Acordo (sem dívida): salva paid_amount = valor real (423) e marca
-    // debt_payment_method = 'acordo' para que calcOwed retorne 0.
-    // Assim os totais refletem o valor real recebido, sem mostrar dívida.
     const isAcordo = isPartial && !paymentModal.isDebt;
-    let obs = paymentModal.observations.trim();
-    if (isAcordo) {
-      const discountNote = `Acordo: ${formatCurrency(paidAmt)} aceito como quitação (desconto de ${formatCurrency(paymentModal.record.rent_value - paidAmt)}).`;
-      obs = obs ? `${obs} — ${discountNote}` : discountNote;
-    }
+    // Observações: só o que o usuário digitou — sem texto automático
+    // O marcador técnico do acordo fica em debt_payment_method = 'acordo'
+    const obs = paymentModal.observations.trim() || null;
     await upsert.mutateAsync({
       ...paymentModal.record,
       paid: true,
       payment_date: paymentModal.date || new Date().toISOString().split('T')[0],
-      paid_amount: paidAmt,                                    // sempre o valor real pago
+      paid_amount: paidAmt,
       payment_method: paymentModal.method,
       debt_payment_method: isAcordo ? 'acordo' : (paymentModal.record.debt_payment_method ?? null),
-      observations: obs || null,
+      observations: obs,
       status: 'Pago',
     });
     setPaymentModal(null);
