@@ -133,19 +133,56 @@ function ApartmentCard({
     })
     .reduce((s, r) => s + r.rent_value, 0);
  
-  const overdue = allFinancialRecords.some(r => {
-    if (r.apartment_id !== apt.id || r.paid) return false;
-    const contract = contracts.find(c => c.id === r.contract_id);
-    // Contratos encerrados nao contam como inadimplentes
-    if (contract?.status === 'ended') return false;
-    // Filtrar pela data de VENCIMENTO (nao por r.month), igual ao Financial e Dashboard
-    const { dueDateStr } = getPeriodAndDueDate(r.month, contract?.start_date ?? null, contract?.payment_day ?? 1);
-    if (!dueDateStr || dueDateStr === '-') return false;
-    const [y, m] = dueDateStr.split('-').map(Number);
-    if (!(y === selectedYear && (selectedMonth === null || m - 1 === selectedMonth))) return false;
-    return getRecordStatus(r.month, contract?.payment_day, contract?.start_date) === 'overdue';
-  });
- 
+  // Status do card: 'overdue' | 'pending' | 'paid'
+  const aptStatus = (() => {
+    let hasOverdue = false;
+    let hasPending = false;
+    let hasPaid = false;
+
+    for (const r of allFinancialRecords) {
+      if (r.apartment_id !== apt.id) continue;
+      const contract = contracts.find(c => c.id === r.contract_id);
+      if (contract?.status === 'ended') continue;
+
+      if (r.paid && r.payment_date) {
+        const [y, m] = r.payment_date.split('-').map(Number);
+        if (y === selectedYear && (selectedMonth === null || m - 1 === selectedMonth))
+          hasPaid = true;
+        continue;
+      }
+
+      // Nao pago — vencimento real (respeita desired_payment_day)
+      const { dueDateStr } = getPeriodAndDueDate(
+        r.month,
+        contract?.start_date ?? null,
+        contract?.payment_day ?? 1,
+        contract?.desired_payment_day,
+        contract?.desired_payment_date,
+      );
+      if (!dueDateStr || dueDateStr === '-') continue;
+      const [y, m] = dueDateStr.split('-').map(Number);
+      if (!(y === selectedYear && (selectedMonth === null || m - 1 === selectedMonth))) continue;
+
+      const st = getRecordStatus(
+        r.month,
+        contract?.payment_day,
+        contract?.start_date,
+        contract?.desired_payment_day,
+        contract?.desired_payment_date,
+      );
+      if (st === 'overdue') hasOverdue = true;
+      else hasPending = true;
+    }
+
+    if (hasOverdue) return 'overdue';
+    if (hasPending) return 'pending';
+    if (hasPaid) return 'paid';
+    return 'paid';
+  })();
+
+  const overdue = aptStatus === 'overdue';
+  const pending = aptStatus === 'pending';
+
   return (
     <>
       <div
@@ -154,7 +191,10 @@ function ApartmentCard({
       >
         <div
           className={`h-1.5 w-full ${
-            currentTenant ? (overdue ? 'bg-destructive' : 'bg-green-500') : 'bg-muted'
+            !currentTenant ? 'bg-muted' :
+            overdue ? 'bg-destructive' :
+            pending ? 'bg-muted-foreground' :
+            'bg-green-500'
           }`}
         />
         <div className="p-4">
@@ -192,8 +232,12 @@ function ApartmentCard({
                 </p>
               </div>
               <div className="flex items-center justify-between">
-                <span className={overdue ? 'badge-overdue' : 'badge-active'}>
-                  {overdue ? 'Inadimplente' : 'Em dia'}
+                <span className={
+                  overdue ? 'badge-overdue' :
+                  pending ? 'text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium' :
+                  'badge-active'
+                }>
+                  {overdue ? 'Inadimplente' : pending ? 'A vencer' : 'Em dia'}
                 </span>
                 {received > 0 && (
                   <p
