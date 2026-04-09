@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { formatCurrency, formatDate } from '@/lib/utils-app';
+import { formatCurrency, formatDate, getPeriodAndDueDate } from '@/lib/utils-app';
 import { FinancialRecordDB, calcOwed } from '@/hooks/useFinancial';
 import { ApartmentDB } from '@/hooks/useApartments';
 import { TenantDB } from '@/hooks/useTenants';
@@ -99,12 +99,17 @@ export default function ReceiptModalDB({
   const today = new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
   const paymentDay = contract?.payment_day ?? 1;
 
+  // Usa getPeriodAndDueDate para que o período reflita o dia de início do contrato
+  // (igual ao que aparece na aba Financeiro do apartamento)
   function getPeriodLabel(month: string) {
-    const [y, m] = month.split('-').map(Number);
-    const startDay = String(paymentDay).padStart(2, '0');
-    const nextM = m === 12 ? 1 : m + 1;
-    const nextY = m === 12 ? y + 1 : y;
-    return `${startDay}/${String(m).padStart(2, '0')}/${y} a ${startDay}/${String(nextM).padStart(2, '0')}/${nextY}`;
+    const { periodLabel } = getPeriodAndDueDate(
+      month,
+      contract?.start_date ?? null,
+      paymentDay,
+      contract?.desired_payment_day,
+      contract?.desired_payment_date,
+    );
+    return periodLabel;
   }
 
   useEffect(() => {
