@@ -7,6 +7,7 @@ import { buildReceiptPDF, generateReceiptCode } from '@/lib/generateReceiptPDF';
 
 export interface SavedReceipt {
   id: string;
+  user_id: string;
   apartment_id: string;
   tenant_id: string | null;
   contract_id: string | null;
@@ -41,6 +42,7 @@ export function useSavedReceipts() {
       const { data, error } = await supabase
         .from('saved_receipts')
         .select('*')
+        .eq('user_id', user!.id)          // isolamento por usuário
         .order('saved_at', { ascending: false });
       if (error) throw error;
       return data as SavedReceipt[];
@@ -105,6 +107,7 @@ export function useSaveReceipt() {
         .from('saved_receipts')
         .upsert(
           {
+            user_id: user!.id,             // isolamento por usuário
             apartment_id: apartmentId,
             tenant_id: tenantId,
             contract_id: contractId,
@@ -119,7 +122,7 @@ export function useSaveReceipt() {
             public_url: publicUrl,
             saved_at: new Date().toISOString(),
           },
-          { onConflict: 'apartment_id,month' }
+          { onConflict: 'user_id,apartment_id,month' }
         );
       if (dbError) throw dbError;
 
@@ -176,12 +179,14 @@ export async function refreshReceiptUrl(
 /** Remove todos os recibos salvos anteriores a 2026 */
 export function useCleanupOldReceipts() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async () => {
       // Busca todos os recibos antigos
       const { data: old, error } = await supabase
         .from('saved_receipts')
         .select('id, storage_path')
+        .eq('user_id', user!.id)          // isolamento por usuário
         .lt('month', '2026-01');
       if (error) throw error;
       if (!old?.length) return 0;
@@ -250,7 +255,8 @@ export function useBulkSaveReceipts() {
       // 3. Verifica quais já existem para não duplicar
       const { data: existing } = await supabase
         .from('saved_receipts')
-        .select('apartment_id, month');
+        .select('apartment_id, month')
+        .eq('user_id', user!.id);         // isolamento por usuário
       const existingSet = new Set(
         (existing || []).map(e => `${e.apartment_id}||${e.month}`)
       );
@@ -324,6 +330,7 @@ export function useBulkSaveReceipts() {
 
           await supabase.from('saved_receipts').upsert(
             {
+              user_id: user!.id,           // isolamento por usuário
               apartment_id: r.apartment_id,
               tenant_id: ten.id,
               contract_id: r.contract_id,
@@ -338,7 +345,7 @@ export function useBulkSaveReceipts() {
               public_url: signedData?.signedUrl || '',
               saved_at: new Date().toISOString(),
             },
-            { onConflict: 'apartment_id,month' }
+            { onConflict: 'user_id,apartment_id,month' }
           );
 
           saved++;
