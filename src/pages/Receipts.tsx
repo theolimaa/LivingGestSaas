@@ -1,456 +1,235 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
+import { FileText, Download, Loader2, FolderArchive, CheckCircle2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import {
-  FileText,
-  FolderOpen,
-  Download,
-  Trash2,
-  Loader2,
-  ChevronRight,
-  ChevronDown,
-  Search,
-  SaveAll,
-} from 'lucide-react';import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import Layout from '@/components/Layout';
-import { MONTHS, YEARS } from '@/lib/utils-app';
-import {
-  useSavedReceipts,
-  useDeleteSavedReceipt,
-  useBulkSaveReceipts,
-  useCleanupOldReceipts,
-  refreshReceiptUrl,
-  SavedReceipt,
-} from '@/hooks/useReceipts';
+import { MONTHS, YEARS, formatCurrency } from '@/lib/utils-app';
+import { useAllFinancialRecords, FinancialRecordDB, calcReceived } from '@/hooks/useFinancial';
+import { useApartments } from '@/hooks/useApartments';
 import { useCondominiums } from '@/hooks/useCondominiums';
- 
-function formatMonth(month: string) {
-  const [y, m] = month.split('-').map(Number);
-  return `${MONTHS[m - 1]} ${y}`;
-}
- 
-function ReceiptItem({
-  receipt,
-  onDelete,
-}: {
-  receipt: SavedReceipt;
-  onDelete: (r: SavedReceipt) => void;
-}) {
-  const [loading, setLoading] = useState(false);
- 
+import { useTenants } from '@/hooks/useTenants';
+import { useContracts } from '@/hooks/useContracts';
+import { useAuth } from '@/hooks/useAuth';
+import { buildReceiptPDF, generateReceiptCode } from '@/lib/generateReceiptPDF';
+import JSZip from 'jszip';
+import { toast } from 'sonner';
+
+export default function Receipts() {
+  const currentYear  = new Date().getFullYear();
+  const currentMonth = new Date().getMonth();
+
+  const [selectedYear,  setSelectedYear]  = useState(String(currentYear));
+  const [selectedMonth, setSelectedMonth] = useState(String(currentMonth));
+  const [selectedCondo, setSelectedCondo] = useState('all');
+  const [downloading,   setDownloading]   = useState(false);
+
+  const { user } = useAuth();
+  const { data: allRecords   = [] } = useAllFinancialRecords();
+  const { data: apartments   = [] } = useApartments();
+  const { data: condominiums = [] } = useCondominiums();
+  const { data: allTenants   = [] } = useTenants();
+  const { data: contracts    = [] } = useContracts();
+
+  const monthIdx = Number(selectedMonth);
+  const yearNum  = Number(selectedYear);
+
+  // Pagamentos cujo payment_date cai no mês selecionado — mesma lógica da Receita
+  const paidInPeriod = allRecords.filter(r => {
+    if (!r.paid || !r.payment_date) return false;
+    const [y, m] = r.payment_date.split('-').map(Number);
+    if (y !== yearNum || m - 1 !== monthIdx) return false;
+    if (selectedCondo === 'all') return true;
+    const apt = apartments.find(a => a.id === r.apartment_id);
+    return apt?.condominium_id === selectedCondo;
+  });
+
+  // Agrupar por condomínio para preview
+  const grouped = condominiums
+    .filter(c => selectedCondo === 'all' || c.id === selectedCondo)
+    .map(condo => {
+      const condoApts    = apartments.filter(a => a.condominium_id === condo.id);
+      const condoRecords = paidInPeriod.filter(r => condoApts.some(a => a.id === r.apartment_id));
+      return { condo, records: condoRecords };
+    })
+    .filter(g => g.records.length > 0);
+
+  const totalReceipts = paidInPeriod.length;
+  const totalValue    = paidInPeriod.reduce((s, r) => s + calcReceived(r), 0);
+
   async function handleDownload() {
-    setLoading(true);
-    try {
-      let url = receipt.public_url;
-      const resp = await fetch(url, { method: 'HEAD' }).catch(() => null);
-      if (!resp || !resp.ok) {
-        const newUrl = await refreshReceiptUrl(receipt.storage_path);
-        if (!newUrl) throw new Error('URL inválida');
-        url = newUrl;
+    if (totalReceipts === 0) {
+      toast.error('Nenhum recibo encontrado para o período selecionado.');
+      return;
+    }
+    setDownloading(true);
+
+    const zip       = new JSZip();
+    const adminName = user?.user_metadata?.username || user?.email?.split('@')[0] || 'Administrador';
+    const today     = new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
+
+    // Pré-indexar por apartamento para histórico anual
+    const recordsByApt: Record<string, FinancialRecordDB[]> = {};
+    for (const r of allRecords) {
+      if (!recordsByApt[r.apartment_id]) recordsByApt[r.apartment_id] = [];
+      recordsByApt[r.apartment_id].push(r);
+    }
+
+    let count = 0, errors = 0;
+
+    for (const r of paidInPeriod) {
+      try {
+        const apt      = apartments.find(a => a.id === r.apartment_id);
+        const condo    = apt ? condominiums.find(c => c.id === apt.condominium_id) : null;
+        const tenant   = allTenants.find(t => t.id === r.tenant_id);
+        const contract = contracts.find(c => c.id === r.contract_id);
+        if (!apt || !condo || !tenant) { errors++; continue; }
+
+        const pdfBytes = buildReceiptPDF({
+          record: r,
+          apartmentUnit:        apt.unit_number,
+          condominiumName:      condo.name,
+          tenantFirstName:      tenant.first_name,
+          tenantLastName:       tenant.last_name,
+          tenantCpf:            tenant.cpf,
+          contractPaymentDay:   contract?.payment_day,
+          contractStartDate:    contract?.start_date,
+          contractCautionPaid:  contract?.caution_paid,
+          contractCautionValue: contract?.caution_value,
+          contractCautionDate:  contract?.caution_date,
+          allYearRecords:       recordsByApt[r.apartment_id] ?? [],
+          adminName,
+          today,
+        });
+
+        const code     = generateReceiptCode(condo.name, apt.unit_number, contract?.start_date);
+        const safeName = `${tenant.first_name}_${tenant.last_name}`.replace(/[^a-zA-Z0-9_]/g, '');
+        zip.file(`${condo.name}/Recibo-Apto${apt.unit_number}-${safeName}-${code}.pdf`, pdfBytes);
+        count++;
+      } catch (e) {
+        console.error('Erro ao gerar recibo:', e);
+        errors++;
       }
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Recibo-${receipt.receipt_code}.pdf`;
-      a.target = '_blank';
+    }
+
+    try {
+      const monthLabel = MONTHS[monthIdx];
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `Recibos-${monthLabel}-${selectedYear}.zip`;
       a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+      if (errors > 0) toast.warning(`${count} recibos baixados, ${errors} falharam.`);
+      else toast.success(`${count} recibo${count !== 1 ? 's' : ''} baixado${count !== 1 ? 's' : ''} com sucesso!`);
     } catch {
-      window.open(receipt.public_url, '_blank');
+      toast.error('Erro ao gerar o arquivo ZIP.');
     } finally {
-      setLoading(false);
+      setDownloading(false);
     }
   }
- 
-  const savedDate = new Date(receipt.saved_at).toLocaleDateString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
- 
-  return (
-    <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/30 rounded-lg transition-colors group">
-      <FileText className="w-5 h-5 text-primary shrink-0" />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">
-          {receipt.tenant_name} — Apto {receipt.apartment_unit}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {formatMonth(receipt.month)} · Código: {receipt.receipt_code} · Salvo
-          em {savedDate}
-        </p>
-      </div>
-      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-7 px-2"
-          onClick={handleDownload}
-          disabled={loading}
-        >
-          {loading ? (
-            <Loader2 className="w-3 h-3 animate-spin" />
-          ) : (
-            <Download className="w-3 h-3" />
-          )}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-7 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
-          onClick={() => onDelete(receipt)}
-        >
-          <Trash2 className="w-3 h-3" />
-        </Button>
-      </div>
-    </div>
-  );
-}
- 
-function FolderSection({
-  label,
-  receipts,
-  onDelete,
-}: {
-  label: string;
-  receipts: SavedReceipt[];
-  onDelete: (r: SavedReceipt) => void;
-}) {
-  const [open, setOpen] = useState(true);
-  return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-3 px-4 py-3 bg-muted/30 hover:bg-muted/50 transition-colors"
-      >
-        {open ? (
-          <ChevronDown className="w-4 h-4 text-muted-foreground" />
-        ) : (
-          <ChevronRight className="w-4 h-4 text-muted-foreground" />
-        )}
-        <FolderOpen className="w-5 h-5 text-amber-500" />
-        <span className="font-semibold text-sm">{label}</span>
-        <span className="ml-auto text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-          {receipts.length} recibo{receipts.length !== 1 ? 's' : ''}
-        </span>
-      </button>
-      {open && (
-        <div className="px-2 py-2 space-y-0.5">
-          {receipts.map(r => (
-            <ReceiptItem key={r.id} receipt={r} onDelete={onDelete} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
- 
-export default function Receipts() {
-  const { data: receipts = [], isLoading } = useSavedReceipts();
-  const { data: condominiums = [] } = useCondominiums();
-  const deleteReceipt = useDeleteSavedReceipt();
-  const bulkSave = useBulkSaveReceipts();
-  const cleanupOld = useCleanupOldReceipts();
- 
-  const [filterYear, setFilterYear] = useState<string>('all');
-  const [filterMonth, setFilterMonth] = useState<string>('all');
-  const [filterCondo, setFilterCondo] = useState<string>('all');
-  const [search, setSearch] = useState('');
-  const [toDelete, setToDelete] = useState<SavedReceipt | null>(null);
-  const [confirmBulk, setConfirmBulk] = useState(false);
-  const [confirmCleanup, setConfirmCleanup] = useState(false);
- 
-  // Filtrar recibos
-  const filtered = useMemo(() => {
-    return receipts.filter(r => {
-      const [y, m] = r.month.split('-').map(Number);
-      if (filterYear !== 'all' && y !== Number(filterYear)) return false;
-      if (filterMonth !== 'all' && m - 1 !== Number(filterMonth)) return false;
-      if (filterCondo !== 'all' && r.condominium_name !== filterCondo)
-        return false;
-      if (search) {
-        const s = search.toLowerCase();
-        if (
-          !r.tenant_name.toLowerCase().includes(s) &&
-          !r.apartment_unit.toLowerCase().includes(s) &&
-          !r.receipt_code.toLowerCase().includes(s) &&
-          !r.condominium_name.toLowerCase().includes(s)
-        )
-          return false;
-      }
-      return true;
-    });
-  }, [receipts, filterYear, filterMonth, filterCondo, search]);
- 
-  // Agrupar por condomínio → mês
-  const grouped = useMemo(() => {
-    const byCondoMonth: Record<
-      string,
-      { condoName: string; month: string; items: SavedReceipt[] }
-    > = {};
-    for (const r of filtered) {
-      const key = `${r.condominium_name}||${r.month}`;
-      if (!byCondoMonth[key]) {
-        byCondoMonth[key] = {
-          condoName: r.condominium_name,
-          month: r.month,
-          items: [],
-        };
-      }
-      byCondoMonth[key].items.push(r);
-    }
-    return Object.values(byCondoMonth).sort((a, b) => {
-      const condoCmp = a.condoName.localeCompare(b.condoName);
-      if (condoCmp !== 0) return condoCmp;
-      return b.month.localeCompare(a.month);
-    });
-  }, [filtered]);
- 
-  // Lista de condomínios únicos nos recibos salvos
-  const condoOptions = useMemo(() => {
-    const names = [...new Set(receipts.map(r => r.condominium_name))].sort();
-    return names;
-  }, [receipts]);
- 
+
+  const monthLabel = MONTHS[monthIdx];
+  const condoName  = condominiums.find(c => c.id === selectedCondo)?.name;
+
   return (
     <Layout>
       <div className="page-content">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2.5">
-              <FileText className="w-6 h-6 text-primary" />
-              Recibos
-            </h1>
-            <p className="text-muted-foreground text-sm mt-0.5">
-              Backup de todos os recibos gerados. Clique em "Salvar" no
-              financeiro de cada apartamento para arquivar aqui.
-            </p>
-          </div>
- 
-          {/* Botão salvar todos */}
-          <div className="flex gap-2 shrink-0">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setConfirmCleanup(true)}
-              disabled={cleanupOld.isPending}
-              className="text-destructive hover:text-destructive hover:bg-destructive/10 text-xs"
-            >
-              {cleanupOld.isPending ? (
-                <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-              ) : (
-                <Trash2 className="w-3 h-3 mr-1" />
-              )}
-              Limpar anteriores a 2026
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => setConfirmBulk(true)}
-              disabled={bulkSave.isPending}
-            >
-              {bulkSave.isPending ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <SaveAll className="w-4 h-4 mr-2" />
-              )}
-              {bulkSave.isPending ? 'Salvando...' : 'Salvar todos os recibos pagos'}
-            </Button>
-          </div>
-        </div>
- 
-        {/* Filtros */}
-        <div className="flex flex-wrap gap-2">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar inquilino, apto..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="pl-8 h-9 text-sm w-52"
-            />
-          </div>
-          <Select value={filterYear} onValueChange={setFilterYear}>
-            <SelectTrigger className="w-28 h-9 text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os anos</SelectItem>
-              {YEARS.map(y => (
-                <SelectItem key={y} value={String(y)}>
-                  {y}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={filterMonth} onValueChange={setFilterMonth}>
-            <SelectTrigger className="w-36 h-9 text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os meses</SelectItem>
-              {MONTHS.map((m, i) => (
-                <SelectItem key={i} value={String(i)}>
-                  {m}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={filterCondo} onValueChange={setFilterCondo}>
-            <SelectTrigger className="w-44 h-9 text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os condomínios</SelectItem>
-              {condoOptions.map(name => (
-                <SelectItem key={name} value={name}>
-                  {name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
- 
-        {/* Contagem */}
-        {!isLoading && (
-          <p className="text-sm text-muted-foreground">
-            {filtered.length} recibo{filtered.length !== 1 ? 's' : ''}{' '}
-            encontrado{filtered.length !== 1 ? 's' : ''}
+
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2.5">
+            <FileText className="w-6 h-6 text-primary" />
+            Recibos
+          </h1>
+          <p className="text-muted-foreground text-sm mt-0.5">
+            Selecione o período e baixe todos os recibos em um arquivo ZIP.
           </p>
-        )}
- 
-        {/* Conteúdo */}
-        {isLoading ? (
-          <div className="flex justify-center py-16">
-            <Loader2 className="w-6 h-6 animate-spin text-primary" />
+        </div>
+
+        <div className="bg-card border border-border rounded-2xl p-6 space-y-5 max-w-2xl">
+          <h2 className="font-semibold text-base">Selecionar Período</h2>
+
+          <div className="flex flex-wrap gap-3">
+            <Select value={selectedYear} onValueChange={setSelectedYear}>
+              <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {YEARS.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+              </SelectContent>
+            </Select>
+
+            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {MONTHS.map((m, i) => <SelectItem key={i} value={String(i)}>{m}</SelectItem>)}
+              </SelectContent>
+            </Select>
+
+            <Select value={selectedCondo} onValueChange={setSelectedCondo}>
+              <SelectTrigger className="w-52"><SelectValue placeholder="Todos os condomínios" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os condomínios</SelectItem>
+                {condominiums.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
-        ) : filtered.length === 0 ? (
-          <div className="empty-state">
-            <FileText className="empty-state-icon" />
-            <p className="font-medium text-muted-foreground mb-1">
-              Nenhum recibo encontrado
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Clique em "Salvar" no modal de recibo de cada apartamento, ou use
-              "Salvar todos os recibos pagos" para gerar o backup de uma vez.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {grouped.map(g => (
-              <FolderSection
-                key={`${g.condoName}||${g.month}`}
-                label={`${g.condoName} — ${formatMonth(g.month)}`}
-                receipts={g.items}
-                onDelete={r => setToDelete(r)}
-              />
-            ))}
-          </div>
-        )}
+
+          {totalReceipts > 0 ? (
+            <div className="bg-muted/40 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FolderArchive className="w-5 h-5 text-primary" />
+                  <span className="font-medium text-sm">
+                    {monthLabel} {selectedYear}{selectedCondo !== 'all' && ` — ${condoName}`}
+                  </span>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-muted-foreground">{totalReceipts} recibo{totalReceipts !== 1 ? 's' : ''}</p>
+                  <p className="text-sm font-bold" style={{ color: 'hsl(var(--paid))' }}>{formatCurrency(totalValue)}</p>
+                </div>
+              </div>
+
+              <div className="space-y-2 pt-1 border-t border-border">
+                {grouped.map(g => (
+                  <div key={g.condo.id} className="flex items-center justify-between text-sm px-1 py-0.5">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                      <span className="text-muted-foreground">{g.condo.name}</span>
+                    </div>
+                    <span className="text-xs font-medium tabular-nums">
+                      {g.records.length} recibo{g.records.length !== 1 ? 's' : ''} · {formatCurrency(g.records.reduce((s, r) => s + calcReceived(r), 0))}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="bg-muted/30 rounded-xl p-6 text-center">
+              <FileText className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">
+                Nenhum pagamento em <strong>{monthLabel} {selectedYear}</strong>
+                {selectedCondo !== 'all' && ` para ${condoName}`}.
+              </p>
+            </div>
+          )}
+
+          <Button
+            onClick={handleDownload}
+            disabled={downloading || totalReceipts === 0}
+            className="w-full sm:w-auto btn-primary-glow gap-2"
+            size="lg"
+          >
+            {downloading ? (
+              <><Loader2 className="w-4 h-4 animate-spin" />Gerando recibos...</>
+            ) : (
+              <><Download className="w-4 h-4" />Baixar {totalReceipts > 0 ? `${totalReceipts} recibo${totalReceipts !== 1 ? 's' : ''}` : 'recibos'} — {monthLabel} {selectedYear}</>
+            )}
+          </Button>
+        </div>
+
       </div>
- 
-      {/* Confirm bulk save */}
-      <AlertDialog open={confirmBulk} onOpenChange={setConfirmBulk}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Salvar todos os recibos pagos</AlertDialogTitle>
-            <AlertDialogDescription>
-              Isso irá gerar e salvar PDFs de todos os registros financeiros
-              marcados como <strong>pagos a partir de Janeiro de 2026</strong>.
-              Recibos que já existem não serão sobrescritos. Pode levar alguns
-              minutos dependendo do volume.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                setConfirmBulk(false);
-                bulkSave.mutate();
-              }}
-            >
-              Confirmar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
- 
-      {/* Confirm cleanup old receipts */}
-      <AlertDialog open={confirmCleanup} onOpenChange={setConfirmCleanup}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remover recibos anteriores a 2026</AlertDialogTitle>
-            <AlertDialogDescription>
-              Isso irá excluir permanentemente todos os recibos salvos com data
-              anterior a Janeiro de 2026. Esta ação não pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                setConfirmCleanup(false);
-                cleanupOld.mutate();
-              }}
-              className="bg-destructive hover:bg-destructive/90"
-            >
-              Remover
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
- 
-      {/* Confirm delete */}
-      <AlertDialog
-        open={!!toDelete}
-        onOpenChange={open => !open && setToDelete(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir Recibo</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tem certeza que deseja excluir o recibo de{' '}
-              <strong>{toDelete?.tenant_name}</strong> referente a{' '}
-              {toDelete ? formatMonth(toDelete.month) : ''}? Esta ação não pode
-              ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (toDelete) {
-                  deleteReceipt.mutate({
-                    id: toDelete.id,
-                    storagePath: toDelete.storage_path,
-                  });
-                  setToDelete(null);
-                }
-              }}
-              className="bg-destructive hover:bg-destructive/90"
-            >
-              Excluir
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </Layout>
   );
 }
- 
