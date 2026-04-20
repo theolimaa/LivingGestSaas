@@ -92,7 +92,7 @@ export default function Receipts() {
           condoName: r.condo?.name ?? 'Sem_Condominio',
           aptUnit: r.apt!.unit_number,
           tenantName: `${r.tenant!.first_name}_${r.tenant!.last_name}`,
-          month: r.month,
+          month: r.payment_date?.substring(0, 7) ?? r.month, // mês do pagamento, não do período
           pdfBytes: buildReceiptPDF({
             record: r,
             apartmentUnit: r.apt!.unit_number,
