@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { MONTHS } from '@/lib/utils-app';
 
-const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string;
 
 export interface DriveConfig {
