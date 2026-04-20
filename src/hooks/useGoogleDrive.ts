@@ -1,16 +1,3 @@
-/**
- * useGoogleDrive — integração com Google Drive via OAuth 2.0 (GIS)
- * Fluxo: usuário clica "Conectar" → popup OAuth → token em memória → upload via Drive REST API
- *
- * Estrutura de pastas criada automaticamente:
- *   <Pasta Raiz do usuário>
- *     └── <Nome do Condomínio>
- *           └── Recibos
- *                 └── <Ano>  (ex: "2026")
- *                       └── <Mês Ano>  (ex: "Março 2026")
- *                             └── Recibo_Apto10-1_Joyce_Nayara.pdf
- */
-
 import { useState, useCallback, useRef } from 'react';
 import { MONTHS } from '@/lib/utils-app';
 
@@ -46,15 +33,19 @@ async function driveGet(url: string, token: string): Promise<Response> {
   return fetch(url, { headers: { Authorization: `Bearer ${token}` } });
 }
 
+/** Busca pasta por nome dentro de um pai — usa URLSearchParams para
+ *  garantir encoding correto de acentos (Sítio Córrego, etc.) */
 async function findFolder(name: string, parentId: string, token: string): Promise<string | null> {
-  const q = encodeURIComponent(
-    `name='${name.replace(/'/g, "\\'")}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`
-  );
-  const res = await driveGet(
-    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`,
-    token
-  );
-  if (!res.ok) throw new Error(`Drive API ${res.status}: ${await res.text()}`);
+  const q = `name='${name.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  const url = new URL('https://www.googleapis.com/drive/v3/files');
+  url.searchParams.set('q', q);
+  url.searchParams.set('fields', 'files(id,name)');
+  url.searchParams.set('pageSize', '10');
+  const res = await driveGet(url.toString(), token);
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Drive busca falhou (${res.status}): ${body}`);
+  }
   const data = await res.json();
   return data.files?.[0]?.id ?? null;
 }
@@ -63,7 +54,11 @@ async function createFolder(name: string, parentId: string, token: string): Prom
   const res = await fetch('https://www.googleapis.com/drive/v3/files', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] }),
+    body: JSON.stringify({
+      name,
+      mimeType: 'application/vnd.google-apps.folder',
+      parents: [parentId],
+    }),
   });
   if (!res.ok) throw new Error(`Erro ao criar pasta "${name}": ${await res.text()}`);
   return (await res.json()).id;
@@ -125,8 +120,9 @@ export function useGoogleDrive() {
     config: DriveConfig,
     onProgress?: (done: number, total: number) => void
   ): Promise<DriveUploadResult> {
-    let tok = token ?? await connect();
+    const tok = token ?? await connect();
     const result: DriveUploadResult = { uploaded: 0, failed: 0, errors: [] };
+    // Cache de IDs de pastas para não buscar repetidamente
     const cache = new Map<string, string>();
 
     async function cached(key: string, name: string, parentId: string): Promise<string> {
@@ -140,9 +136,10 @@ export function useGoogleDrive() {
       try {
         const [year, monthNum] = f.month.split('-').map(Number);
         const monthLabel = `${MONTHS[monthNum - 1]} ${year}`;
-        const condoId   = await cached(`c:${f.condoName}`,  f.condoName, config.rootFolderId);
-        const recibosId = await cached(`r:${f.condoName}`,  'Recibos',   condoId);
-        const yearId    = await cached(`y:${f.condoName}:${year}`, String(year), recibosId);
+        // Estrutura: Root > Condo > Recibos > Ano > Mês
+        const condoId   = await cached(`c:${f.condoName}`,          f.condoName,  config.rootFolderId);
+        const recibosId = await cached(`r:${f.condoName}`,          'Recibos',    condoId);
+        const yearId    = await cached(`y:${f.condoName}:${year}`,  String(year), recibosId);
         const monthId   = await cached(`m:${f.condoName}:${f.month}`, monthLabel, yearId);
         const safeName  = `Recibo_${f.aptUnit}_${f.tenantName}.pdf`.replace(/\s+/g, '_');
         await uploadPDF(safeName, f.pdfBytes, monthId, tok);
