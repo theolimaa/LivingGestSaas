@@ -108,7 +108,7 @@ export default function VacancyIndex() {
             {/* Cards resumo */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="stat-card">
-                <p className="text-xs font-semibold text-foreground mb-1">Taxa de Ocupação (mês atual)</p>
+                <p className="text-xs font-semibold text-foreground mb-1 relative z-10">Taxa de Ocupação (mês atual)</p>
                 <p className="text-2xl font-bold" style={{ color: 'hsl(var(--paid))' }}>
                   {currentMonth?.occupancyRate.toFixed(1)}%
                 </p>
@@ -117,7 +117,7 @@ export default function VacancyIndex() {
                 </p>
               </div>
               <div className="stat-card">
-                <p className="text-xs font-semibold text-foreground mb-1">Taxa de Vacância (mês atual)</p>
+                <p className="text-xs font-semibold text-foreground mb-1 relative z-10">Taxa de Vacância (mês atual)</p>
                 <p className="text-2xl font-bold" style={{ color: currentMonth?.vacancyRate > 20 ? 'hsl(var(--overdue))' : 'hsl(var(--warning))' }}>
                   {currentMonth?.vacancyRate.toFixed(1)}%
                 </p>
@@ -126,14 +126,14 @@ export default function VacancyIndex() {
                 </p>
               </div>
               <div className="stat-card">
-                <p className="text-xs font-semibold text-foreground mb-1">Média de Ocupação ({selectedYear})</p>
+                <p className="text-xs font-semibold text-foreground mb-1 relative z-10">Média de Ocupação ({selectedYear})</p>
                 <p className="text-2xl font-bold text-primary">{avgOccupancy.toFixed(1)}%</p>
                 <div className="mt-2"><Bar value={avgOccupancy} color="hsl(var(--primary))" /></div>
               </div>
               <div className="stat-card">
-                <p className="text-xs font-semibold text-foreground mb-1">Receita Potencial (mês atual)</p>
-                <p className="text-2xl font-bold">{formatCurrency(currentMonth?.potentialRevenue ?? 0)}</p>
-                <p className="text-xs text-muted-foreground/80 mt-1">contratos ativos</p>
+                <p className="text-xs font-semibold text-foreground mb-1 relative z-10">Receita Potencial (mês atual)</p>
+                <p className="text-2xl font-bold relative z-10">{formatCurrency(currentMonth?.potentialRevenue ?? 0)}</p>
+                <p className="text-xs text-muted-foreground mt-1 relative z-10">contratos ativos</p>
               </div>
             </div>
 
