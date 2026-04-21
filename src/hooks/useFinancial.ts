@@ -57,9 +57,10 @@ export function calcOwed(r: FinancialRecordDB): number {
 export function calcReceived(r: FinancialRecordDB): number {
   if (!r.paid) return 0;
   const paid = r.paid_amount ?? r.rent_value;
-  if (r.debt_payment_method === 'acordo') return paid; // valor real pago no acordo
+  if (r.debt_payment_method === 'acordo') return paid;
   const debtPaid = r.debt_paid_amount ?? 0;
-  return Math.min(r.rent_value, paid + debtPaid);
+  // Sem cap em rent_value — pagamentos proporcionais podem ser maiores que o aluguel mensal
+  return paid + debtPaid;
 }
 
 export function useFinancialRecords(apartmentId: string) {
