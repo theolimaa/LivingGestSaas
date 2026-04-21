@@ -109,26 +109,26 @@ export default function VacancyIndex() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="stat-card">
                 <p className="text-xs font-semibold text-foreground mb-1 relative z-10">Taxa de Ocupação (mês atual)</p>
-                <p className="text-2xl font-bold" style={{ color: 'hsl(var(--paid))' }}>
+                <p className="text-2xl font-bold relative z-10" style={{ color: 'hsl(var(--paid))' }}>
                   {currentMonth?.occupancyRate.toFixed(1)}%
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-muted-foreground mt-1 relative z-10">
                   {currentMonth?.occupiedApts}/{currentMonth?.totalApts} aptos
                 </p>
               </div>
               <div className="stat-card">
                 <p className="text-xs font-semibold text-foreground mb-1 relative z-10">Taxa de Vacância (mês atual)</p>
-                <p className="text-2xl font-bold" style={{ color: currentMonth?.vacancyRate > 20 ? 'hsl(var(--overdue))' : 'hsl(var(--warning))' }}>
+                <p className="text-2xl font-bold relative z-10" style={{ color: currentMonth?.vacancyRate > 20 ? 'hsl(var(--overdue))' : 'hsl(var(--warning))' }}>
                   {currentMonth?.vacancyRate.toFixed(1)}%
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-muted-foreground mt-1 relative z-10">
                   {currentMonth?.vacantApts} vago{currentMonth?.vacantApts !== 1 ? 's' : ''}
                 </p>
               </div>
               <div className="stat-card">
                 <p className="text-xs font-semibold text-foreground mb-1 relative z-10">Média de Ocupação ({selectedYear})</p>
-                <p className="text-2xl font-bold text-primary">{avgOccupancy.toFixed(1)}%</p>
-                <div className="mt-2"><Bar value={avgOccupancy} color="hsl(var(--primary))" /></div>
+                <p className="text-2xl font-bold text-primary relative z-10">{avgOccupancy.toFixed(1)}%</p>
+                <div className="mt-2 relative z-10"><Bar value={avgOccupancy} color="hsl(var(--primary))" /></div>
               </div>
               <div className="stat-card">
                 <p className="text-xs font-semibold text-foreground mb-1 relative z-10">Receita Potencial (mês atual)</p>
