@@ -536,7 +536,7 @@ export default function FinancialTabDB({ apartmentId, tenantId, tenantName, tena
         </DialogContent>
       </Dialog>
 
-      {/* ─── Modal de Saldo Devedor ──────────────────────────────────────────── */}}
+      {/* ─── Modal de Saldo Devedor ──────────────────────────────────────────── */}
       <Dialog open={!!debtModal} onOpenChange={() => setDebtModal(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
