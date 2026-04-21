@@ -234,19 +234,19 @@ export default function MonthlyReport() {
         {/* Resumo */}
         <div className="grid grid-cols-3 gap-3">
           <div className="stat-card">
-            <p className="text-sm font-semibold text-foreground">Recebido</p>
-            <p className="text-2xl font-bold" style={{ color: 'hsl(var(--paid))' }}>{formatCurrency(grandPaid)}</p>
-            <p className="text-xs text-muted-foreground/70 mt-0.5">Pagamentos recebidos no mês</p>
+            <p className="text-sm font-semibold text-foreground relative z-10">Recebido</p>
+            <p className="text-2xl font-bold relative z-10" style={{ color: 'hsl(var(--paid))' }}>{formatCurrency(grandPaid)}</p>
+            <p className="text-xs text-muted-foreground mt-0.5 relative z-10">Pagamentos recebidos no mês</p>
           </div>
           <div className="stat-card">
-            <p className="text-sm font-semibold text-foreground">A Receber</p>
-            <p className="text-2xl font-bold" style={{ color: 'hsl(var(--warning))' }}>{formatCurrency(grandPending)}</p>
-            <p className="text-xs text-muted-foreground/70 mt-0.5">Vencimento ainda não chegou</p>
+            <p className="text-sm font-semibold text-foreground relative z-10">A Receber</p>
+            <p className="text-2xl font-bold relative z-10" style={{ color: 'hsl(var(--warning))' }}>{formatCurrency(grandPending)}</p>
+            <p className="text-xs text-muted-foreground mt-0.5 relative z-10">Vencimento ainda não chegou</p>
           </div>
           <div className="stat-card">
-            <p className="text-sm font-semibold text-foreground">Inadimplente</p>
-            <p className="text-2xl font-bold" style={{ color: 'hsl(var(--overdue))' }}>{formatCurrency(grandOverdue)}</p>
-            <p className="text-xs text-muted-foreground/70 mt-0.5">Venceu e não pagou</p>
+            <p className="text-sm font-semibold text-foreground relative z-10">Inadimplente</p>
+            <p className="text-2xl font-bold relative z-10" style={{ color: 'hsl(var(--overdue))' }}>{formatCurrency(grandOverdue)}</p>
+            <p className="text-xs text-muted-foreground mt-0.5 relative z-10">Venceu e não pagou</p>
           </div>
         </div>
 
