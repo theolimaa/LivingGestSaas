@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   CheckCircle, XCircle, AlertCircle, Receipt, Loader2,
-  CalendarDays, Banknote, Wallet, AlertTriangle,
+  CalendarDays, Banknote, Wallet, AlertTriangle, Pencil,
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
@@ -70,6 +70,13 @@ export default function FinancialTabDB({ apartmentId, tenantId, tenantName, tena
     method: PaymentMethod;
     isDebt: boolean;        // true = fica devendo a diferença
     observations: string;   // acordo ou observação livre
+  } | null>(null);
+
+  // Modal de edição de valor do período e devendo
+  const [editValueModal, setEditValueModal] = useState<{
+    record: FinancialRecordDB;
+    rentValue: string;
+    debtAmount: string;  // valor que fica devendo (editável)
   } | null>(null);
 
   // Modal de registro de dívida (pagamento posterior do saldo)
@@ -177,6 +184,23 @@ export default function FinancialTabDB({ apartmentId, tenantId, tenantName, tena
     setDebtModal(null);
   }
 
+  // Confirmar edição de valor do período / devendo
+  async function confirmEditValue() {
+    if (!editValueModal) return;
+    const newRentValue = parseFloat(editValueModal.rentValue) || editValueModal.record.rent_value;
+    const newDebt = parseFloat(editValueModal.debtAmount);
+    // Se o usuário definiu devendo manualmente, ajustamos paid_amount = rent_value - debt
+    const currentPaid = editValueModal.record.paid_amount ?? editValueModal.record.rent_value;
+    await upsert.mutateAsync({
+      ...editValueModal.record,
+      rent_value: newRentValue,
+      // Se devendo foi editado explicitamente, recalcula paid_amount
+      paid_amount: !isNaN(newDebt) ? Math.max(0, newRentValue - newDebt) : currentPaid,
+      debt_payment_method: editValueModal.record.debt_payment_method,
+    });
+    setEditValueModal(null);
+  }
+
   return (
     <div className="space-y-4">
       {/* Filtros */}
@@ -252,7 +276,20 @@ export default function FinancialTabDB({ apartmentId, tenantId, tenantName, tena
                   <tr key={r.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
                     <td className="px-3 py-3 font-medium text-xs">{periodLabel}</td>
                     <td className="px-3 py-3 text-center text-xs hidden md:table-cell">{dueDateLabel}</td>
-                    <td className="px-3 py-3 text-right font-semibold">{formatCurrency(r.rent_value)}</td>
+                    <td className="px-3 py-3 text-right font-semibold">
+                      <button
+                        onClick={() => setEditValueModal({
+                          record: r,
+                          rentValue: String(r.rent_value),
+                          debtAmount: String(calcOwed(r) > 0 ? calcOwed(r) : ''),
+                        })}
+                        className="inline-flex items-center gap-1 hover:text-primary transition-colors group"
+                        title="Editar valor do período"
+                      >
+                        {formatCurrency(r.rent_value)}
+                        <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-50 transition-opacity" />
+                      </button>
+                    </td>
                     <td className="px-3 py-3 text-right hidden sm:table-cell">
                       {r.paid ? (
                         <span style={{ color: 'hsl(var(--paid))' }}>{formatCurrency(received)}</span>
@@ -447,7 +484,59 @@ export default function FinancialTabDB({ apartmentId, tenantId, tenantName, tena
         </DialogContent>
       </Dialog>
 
-      {/* ─── Modal de Saldo Devedor ──────────────────────────────────────────── */}
+      {/* ─── Modal de Edição de Valor / Devendo ────────────────────────────────── */}
+      <Dialog open={!!editValueModal} onOpenChange={() => setEditValueModal(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="w-5 h-5 text-primary" />
+              Editar Período
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2 space-y-4">
+            <div>
+              <Label>Valor do Período (R$)</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                className="mt-1"
+                value={editValueModal?.rentValue ?? ''}
+                onChange={e => setEditValueModal(prev => prev ? { ...prev, rentValue: e.target.value } : null)}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Use para ajustar o valor proporcional do período.
+              </p>
+            </div>
+            {editValueModal?.record.paid && (
+              <div>
+                <Label>Valor Devendo (R$)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  className="mt-1"
+                  placeholder={editValueModal ? String(Math.max(0, parseFloat(editValueModal.rentValue || '0') - (editValueModal.record.paid_amount ?? parseFloat(editValueModal.rentValue || '0')))) : '0'}
+                  value={editValueModal?.debtAmount ?? ''}
+                  onChange={e => setEditValueModal(prev => prev ? { ...prev, debtAmount: e.target.value } : null)}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Deixe em branco para calcular automaticamente (Valor − Pago).
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditValueModal(null)}>Cancelar</Button>
+            <Button onClick={confirmEditValue} disabled={upsert.isPending}>
+              {upsert.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Modal de Saldo Devedor ──────────────────────────────────────────── */}}
       <Dialog open={!!debtModal} onOpenChange={() => setDebtModal(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
