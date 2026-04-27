@@ -14,6 +14,7 @@ import {
   ChevronUp,
   FileText,
   Building2,
+  History,
 } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
@@ -33,6 +34,7 @@ const navItems = [
     ],
   },
   { label: 'Recibos', icon: FileText, path: '/recibos' },
+  { label: 'Anteriores', icon: History, path: '/anteriores' },
 ];
  
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -354,4 +356,3 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
- 
