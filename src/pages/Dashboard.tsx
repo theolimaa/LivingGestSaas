@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Plus, Building2, Home, TrendingUp, TrendingDown, DollarSign, Pencil, Trash2, ArrowUpDown, AlertTriangle, ChevronRight } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Plus, Building2, Home, TrendingUp, TrendingDown, DollarSign, Pencil, Trash2, ArrowUpDown, AlertTriangle, ChevronRight, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -15,7 +15,7 @@ import { useCondominiums, useAddCondominium, useUpdateCondominium, useDeleteCond
 import { useApartments } from '@/hooks/useApartments';
 import { useAllFinancialRecords, FinancialRecordDB, calcReceived, calcOwed } from '@/hooks/useFinancial';
 import { useContracts } from '@/hooks/useContracts';
-import { useTenants } from '@/hooks/useTenants';
+import { useTenants, useAllPreviousTenants } from '@/hooks/useTenants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
  
 function getStatus(
@@ -74,7 +74,7 @@ type ModalSortDir = 'asc' | 'desc';
  
 function DetailModal({ open, onClose, title, records, tenants, apartments, condominiums, variant }: {
   open: boolean; onClose: () => void; title: string;
-  records: (FinancialRecordDB & { computedStatus: string })[]; tenants: { id: string; first_name: string; last_name: string }[];
+  records: (FinancialRecordDB & { computedStatus: string; isFormer?: boolean })[]; tenants: { id: string; first_name: string; last_name: string }[];
   apartments: { id: string; unit_number: string; condominium_id: string }[]; condominiums: { id: string; name: string }[];
   variant: 'pending' | 'overdue' | 'received' | 'debt';
 }) {
@@ -157,7 +157,14 @@ function DetailModal({ open, onClose, title, records, tenants, apartments, condo
                     <tr key={r.id} className="border-b border-border/60 last:border-0 hover:bg-muted/30 transition-colors">
                       <td className="px-3 py-2.5 text-sm">{r.condo?.name ?? '-'}</td>
                       <td className="px-3 py-2.5 text-sm font-medium">{r.apt?.unit_number ?? '-'}</td>
-                      <td className="px-3 py-2.5 text-sm">{t ? `${t.first_name} ${t.last_name}` : '-'}</td>
+                      <td className="px-3 py-2.5 text-sm">
+                        <span>{t ? `${t.first_name} ${t.last_name}` : '-'}</span>
+                        {variant === 'debt' && r.isFormer && (
+                          <Link to="/anteriores" onClick={onClose} className="ml-2 inline-flex items-center gap-0.5 text-xs text-muted-foreground hover:text-primary transition-colors border border-border rounded px-1 py-0.5">
+                            <History className="w-2.5 h-2.5" /> anterior
+                          </Link>
+                        )}
+                      </td>
                       <td className="px-3 py-2.5 text-right font-semibold text-sm">{formatCurrency(variant === 'received' ? calcReceived(r) : variant === 'debt' ? calcOwed(r) : r.rent_value)}</td>
                       <td className="px-3 py-2.5 text-center text-xs text-muted-foreground">{r.dateCol}</td>
                     </tr>
@@ -188,6 +195,7 @@ export default function Dashboard() {
   const { data: financialRecords = [] } = useAllFinancialRecords();
   const { data: contracts = [] } = useContracts();
   const { data: allTenants = [] } = useTenants();
+  const { data: previousTenants = [] } = useAllPreviousTenants();
   const deleteCondo = useDeleteCondominium();
  
   const { selectedYear, selectedMonth } = state;
@@ -245,13 +253,19 @@ export default function Dashboard() {
   const totalPending = pendingRecords.reduce((s, r) => s + r.rent_value, 0);
   const totalOverdue = overdueRecords.reduce((s, r) => s + r.rent_value, 0);
  
+  // IDs de inquilinos anteriores para marcar dívidas de ex-inquilinos
+  const previousTenantIds = new Set(previousTenants.map(pt => pt.original_id).filter(Boolean));
+
   const debtRecords = enrichedRecords.filter(r => {
     if (!r.paid || !r.paymentMonth) return false;
     const owed = calcOwed(r);
     if (owed <= 0) return false;
     if (selectedMonthKey) return r.paymentMonth === selectedMonthKey;
     return r.paymentMonth.startsWith(String(selectedYear));
-  });
+  }).map(r => ({
+    ...r,
+    isFormer: previousTenantIds.has(r.tenant_id ?? ''),
+  }));
   const totalOwed = debtRecords.reduce((s, r) => s + calcOwed(r), 0);
  
   const chartData = MONTHS.map((month, idx) => {
@@ -373,6 +387,25 @@ export default function Dashboard() {
             >
               {formatCurrency(totalOwed)}
             </p>
+            {/* Breakdown atual vs anterior */}
+            {totalOwed > 0 && (() => {
+              const formerOwed = debtRecords.filter(r => r.isFormer).reduce((s, r) => s + calcOwed(r), 0);
+              const currentOwed = totalOwed - formerOwed;
+              return (
+                <div className="mt-1.5 relative z-10 space-y-0.5">
+                  {currentOwed > 0 && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Home className="w-3 h-3" /> Atuais: {formatCurrency(currentOwed)}
+                    </p>
+                  )}
+                  {formerOwed > 0 && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <History className="w-3 h-3" /> Anteriores: {formatCurrency(formerOwed)}
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
             <p className="text-xs text-muted-foreground mt-1.5 relative z-10 flex items-center gap-1">
               Ver detalhes <ChevronRight className="w-3 h-3" />
             </p>
