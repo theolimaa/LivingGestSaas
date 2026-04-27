@@ -19,6 +19,7 @@ import CondominiumDetail from "./pages/CondominiumDetail";
 import ApartmentDetail from "./pages/ApartmentDetail";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
+import PreviousTenants from "./pages/PreviousTenants";
 
 const queryClient = new QueryClient();
 
@@ -61,6 +62,7 @@ function AppRoutes() {
       <Route path="/condominiums/:id" element={<ProtectedRoute><CondominiumDetail /></ProtectedRoute>} />
       <Route path="/apartments/:id" element={<ProtectedRoute><ApartmentDetail /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+      <Route path="/anteriores" element={<ProtectedRoute><PreviousTenants /></ProtectedRoute>} />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
