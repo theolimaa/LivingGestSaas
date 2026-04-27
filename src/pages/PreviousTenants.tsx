@@ -1,0 +1,415 @@
+import { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import {
+  Search, History, Building2, Home, AlertCircle,
+  CheckCircle2, ChevronDown, ChevronRight, Loader2,
+  Pencil, ArrowLeft,
+} from 'lucide-react';
+import Layout from '@/components/Layout';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { useAllPreviousTenants } from '@/hooks/useTenants';
+import { useApartments } from '@/hooks/useApartments';
+import { useCondominiums } from '@/hooks/useCondominiums';
+import { useContracts } from '@/hooks/useContracts';
+import { useAllFinancialRecords, useUpsertFinancialRecord, calcOwed, calcReceived, FinancialRecordDB } from '@/hooks/useFinancial';
+import { formatCurrency, formatDate, getPeriodAndDueDate } from '@/lib/utils-app';
+import { toast } from 'sonner';
+
+type PaymentMethod = 'pix' | 'especie';
+
+function Badge({ children, color }: { children: React.ReactNode; color: 'red' | 'green' | 'gray' }) {
+  const styles = {
+    red: 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400',
+    green: 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400',
+    gray: 'bg-muted text-muted-foreground',
+  };
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${styles[color]}`}>
+      {children}
+    </span>
+  );
+}
+
+export default function PreviousTenants() {
+  const { data: previousTenants = [], isLoading: loadingTenants } = useAllPreviousTenants();
+  const { data: apartments = [] } = useApartments();
+  const { data: condominiums = [] } = useCondominiums();
+  const { data: contracts = [] } = useContracts();
+  const { data: financialRecords = [] } = useAllFinancialRecords();
+  const upsert = useUpsertFinancialRecord();
+
+  const [search, setSearch] = useState('');
+  const [filterCondo, setFilterCondo] = useState<string>('all');
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  // Modal de edição de pagamento
+  const [editModal, setEditModal] = useState<{
+    record: FinancialRecordDB;
+    paidAmount: string;
+    date: string;
+    method: PaymentMethod;
+    debtAmount: string;
+  } | null>(null);
+
+  // Enriquecer anteriores
+  const enriched = useMemo(() => {
+    return previousTenants.map(pt => {
+      const apt = apartments.find(a => a.id === pt.apartment_id);
+      const condo = condominiums.find(c => c.id === apt?.condominium_id);
+      // Busca contrato pelo original_id (tenants.id)
+      const contract = contracts.find(c => c.tenant_id === pt.original_id);
+      // Registros financeiros vinculados ao tenant original
+      const records = financialRecords.filter(r => r.tenant_id === pt.original_id);
+      const totalOwed = records.reduce((s, r) => s + calcOwed(r), 0);
+      const totalReceived = records.reduce((s, r) => s + calcReceived(r), 0);
+      return { ...pt, apt, condo, contract, records, totalOwed, totalReceived };
+    });
+  }, [previousTenants, apartments, condominiums, contracts, financialRecords]);
+
+  // Filtros
+  const filtered = enriched.filter(pt => {
+    const name = `${pt.first_name} ${pt.last_name}`.toLowerCase();
+    if (search && !name.includes(search.toLowerCase()) && !pt.apt?.unit_number.toLowerCase().includes(search.toLowerCase())) return false;
+    if (filterCondo !== 'all' && pt.condo?.id !== filterCondo) return false;
+    return true;
+  });
+
+  const totalDebtAll = filtered.reduce((s, pt) => s + pt.totalOwed, 0);
+  const withDebt = filtered.filter(pt => pt.totalOwed > 0);
+
+  function toggleExpand(id: string) {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  async function handleSaveEdit() {
+    if (!editModal) return;
+    const paidAmt = parseFloat(editModal.paidAmount);
+    const debtAmt = parseFloat(editModal.debtAmount);
+    if (isNaN(paidAmt)) { toast.error('Valor inválido.'); return; }
+
+    // Se debtAmount foi preenchido explicitamente, ajusta paid_amount para rent_value - debt
+    const effectivePaid = !isNaN(debtAmt)
+      ? Math.max(0, editModal.record.rent_value - debtAmt)
+      : paidAmt;
+
+    await upsert.mutateAsync({
+      ...editModal.record,
+      paid: true,
+      paid_amount: effectivePaid,
+      payment_date: editModal.date,
+      payment_method: editModal.method,
+    });
+    setEditModal(null);
+    toast.success('Pagamento atualizado!');
+  }
+
+  return (
+    <Layout>
+      <div className="page-content">
+        {/* Header */}
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2.5">
+            <History className="w-6 h-6 text-primary" />
+            Inquilinos Anteriores
+          </h1>
+          <p className="text-muted-foreground text-sm mt-0.5">
+            Gerencie pagamentos e débitos de inquilinos que já saíram.
+          </p>
+        </div>
+
+        {/* Resumo de dívidas */}
+        {totalDebtAll > 0 && (
+          <div className="flex items-center gap-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-xl px-4 py-3">
+            <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-red-700 dark:text-red-400">
+                {withDebt.length} inquilino{withDebt.length !== 1 ? 's' : ''} com dívidas em aberto
+              </p>
+              <p className="text-xs text-red-600 dark:text-red-500">
+                Total a receber: {formatCurrency(totalDebtAll)}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Filtros */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              placeholder="Buscar por nome ou apartamento..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          <Select value={filterCondo} onValueChange={setFilterCondo}>
+            <SelectTrigger className="w-full sm:w-56">
+              <Building2 className="w-4 h-4 mr-2 text-muted-foreground" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos os condomínios</SelectItem>
+              {condominiums.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Lista */}
+        {loadingTenants ? (
+          <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-16">
+            <History className="w-12 h-12 mx-auto mb-3 text-muted-foreground/30" />
+            <p className="text-muted-foreground font-medium">Nenhum inquilino anterior encontrado.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {filtered.map(pt => {
+              const isOpen = expanded.has(pt.id);
+              const hasDebt = pt.totalOwed > 0;
+              const contract = pt.contract;
+
+              return (
+                <div key={pt.id} className="bg-card border border-border rounded-xl overflow-hidden">
+                  {/* Cabeçalho do card */}
+                  <button
+                    className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/30 transition-colors text-left"
+                    onClick={() => toggleExpand(pt.id)}
+                  >
+                    {/* Avatar */}
+                    <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center shrink-0 text-sm font-bold text-muted-foreground">
+                      {pt.first_name.charAt(0)}{pt.last_name.charAt(0)}
+                    </div>
+
+                    {/* Info principal */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-sm truncate">
+                          {pt.first_name} {pt.last_name}
+                        </p>
+                        {hasDebt ? (
+                          <Badge color="red">
+                            <AlertCircle className="w-3 h-3" />
+                            Devendo {formatCurrency(pt.totalOwed)}
+                          </Badge>
+                        ) : (
+                          <Badge color="green">
+                            <CheckCircle2 className="w-3 h-3" />
+                            Quitado
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground flex-wrap">
+                        {pt.condo && (
+                          <span className="flex items-center gap-1">
+                            <Building2 className="w-3 h-3" />{pt.condo.name}
+                          </span>
+                        )}
+                        {pt.apt && (
+                          <span className="flex items-center gap-1">
+                            <Home className="w-3 h-3" />
+                            <Link
+                              to={`/apartments/${pt.apt.id}`}
+                              onClick={e => e.stopPropagation()}
+                              className="hover:text-primary hover:underline"
+                            >
+                              Apto {pt.apt.unit_number}
+                            </Link>
+                          </span>
+                        )}
+                        {pt.archived_at && (
+                          <span>Saiu em {formatDate(pt.archived_at.split('T')[0])}</span>
+                        )}
+                        {contract?.end_date && (
+                          <span>Contrato até {formatDate(contract.end_date)}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Totais e chevron */}
+                    <div className="flex items-center gap-4 shrink-0">
+                      <div className="hidden sm:block text-right">
+                        <p className="text-xs text-muted-foreground">Recebido</p>
+                        <p className="text-sm font-semibold" style={{ color: 'hsl(var(--paid))' }}>
+                          {formatCurrency(pt.totalReceived)}
+                        </p>
+                      </div>
+                      {isOpen
+                        ? <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                        : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+                    </div>
+                  </button>
+
+                  {/* Histórico financeiro expandido */}
+                  {isOpen && (
+                    <div className="border-t border-border bg-muted/10">
+                      {pt.records.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-6">
+                          Nenhum registro financeiro encontrado.
+                        </p>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-border bg-muted/40">
+                                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">Período</th>
+                                <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground">Valor</th>
+                                <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground">Pago</th>
+                                <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground">Devendo</th>
+                                <th className="text-center px-4 py-2.5 text-xs font-semibold text-muted-foreground">Pagamento</th>
+                                <th className="text-center px-4 py-2.5 text-xs font-semibold text-muted-foreground">Ações</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {pt.records
+                                .sort((a, b) => a.month.localeCompare(b.month))
+                                .map(r => {
+                                  const owed = calcOwed(r);
+                                  const received = calcReceived(r);
+                                  const { periodLabel } = getPeriodAndDueDate(
+                                    r.month,
+                                    contract?.start_date ?? null,
+                                    contract?.payment_day ?? 1,
+                                    contract?.desired_payment_day,
+                                    contract?.desired_payment_date,
+                                  );
+                                  return (
+                                    <tr key={r.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20">
+                                      <td className="px-4 py-2.5 text-xs font-medium">{periodLabel}</td>
+                                      <td className="px-4 py-2.5 text-right font-semibold">{formatCurrency(r.rent_value)}</td>
+                                      <td className="px-4 py-2.5 text-right">
+                                        {r.paid
+                                          ? <span style={{ color: 'hsl(var(--paid))' }}>{formatCurrency(received)}</span>
+                                          : <span className="text-muted-foreground">—</span>}
+                                      </td>
+                                      <td className="px-4 py-2.5 text-right">
+                                        {owed > 0
+                                          ? <span className="font-semibold text-destructive">{formatCurrency(owed)}</span>
+                                          : <span className="text-muted-foreground">—</span>}
+                                      </td>
+                                      <td className="px-4 py-2.5 text-center text-xs text-muted-foreground">
+                                        {r.payment_date ?? '—'}
+                                      </td>
+                                      <td className="px-4 py-2.5 text-center">
+                                        <button
+                                          onClick={() => setEditModal({
+                                            record: r,
+                                            paidAmount: String(r.paid_amount ?? r.rent_value),
+                                            date: r.payment_date ?? new Date().toISOString().split('T')[0],
+                                            method: (r.payment_method as PaymentMethod) ?? 'pix',
+                                            debtAmount: owed > 0 ? String(owed) : '',
+                                          })}
+                                          className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                                          title="Editar pagamento"
+                                        >
+                                          <Pencil className="w-3.5 h-3.5" />
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                            </tbody>
+                            <tfoot>
+                              <tr className="bg-muted/30">
+                                <td className="px-4 py-2 text-xs font-semibold text-muted-foreground">Total</td>
+                                <td className="px-4 py-2 text-right font-bold text-sm">
+                                  {formatCurrency(pt.records.reduce((s, r) => s + r.rent_value, 0))}
+                                </td>
+                                <td className="px-4 py-2 text-right font-bold text-sm" style={{ color: 'hsl(var(--paid))' }}>
+                                  {formatCurrency(pt.totalReceived)}
+                                </td>
+                                <td className="px-4 py-2 text-right font-bold text-sm text-destructive">
+                                  {pt.totalOwed > 0 ? formatCurrency(pt.totalOwed) : '—'}
+                                </td>
+                                <td colSpan={2} />
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Modal edição de pagamento */}
+      <Dialog open={!!editModal} onOpenChange={() => setEditModal(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="w-5 h-5 text-primary" />
+              Editar Pagamento
+            </DialogTitle>
+          </DialogHeader>
+          {editModal && (
+            <div className="py-2 space-y-4">
+              <div className="bg-muted/40 rounded-lg px-3 py-2 text-xs text-muted-foreground">
+                Contrato: <strong>{formatCurrency(editModal.record.rent_value)}</strong> ·
+                Mês: <strong>{editModal.record.month}</strong>
+              </div>
+              <div>
+                <Label>Valor Pago (R$)</Label>
+                <Input type="number" min="0" step="0.01" className="mt-1"
+                  value={editModal.paidAmount}
+                  onChange={e => setEditModal(p => p ? { ...p, paidAmount: e.target.value, debtAmount: '' } : null)}
+                />
+              </div>
+              <div>
+                <Label>Valor Devendo <span className="text-muted-foreground font-normal">(ou deixe calcular automaticamente)</span></Label>
+                <Input type="number" min="0" step="0.01" className="mt-1"
+                  placeholder={String(Math.max(0, editModal.record.rent_value - parseFloat(editModal.paidAmount || '0')))}
+                  value={editModal.debtAmount}
+                  onChange={e => setEditModal(p => p ? { ...p, debtAmount: e.target.value } : null)}
+                />
+              </div>
+              <div>
+                <Label>Forma de Pagamento</Label>
+                <div className="flex gap-2 mt-1">
+                  {(['pix', 'especie'] as const).map(m => (
+                    <button key={m} type="button"
+                      onClick={() => setEditModal(p => p ? { ...p, method: m } : null)}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${editModal.method === m ? 'border-primary bg-primary/5 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'}`}
+                    >
+                      {m === 'pix' ? '📱 Pix' : '💵 Espécie'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <Label>Data do Pagamento</Label>
+                <Input type="date" className="mt-1"
+                  value={editModal.date}
+                  onChange={e => setEditModal(p => p ? { ...p, date: e.target.value } : null)}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditModal(null)}>Cancelar</Button>
+            <Button onClick={handleSaveEdit} disabled={upsert.isPending}>
+              {upsert.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Layout>
+  );
+}
