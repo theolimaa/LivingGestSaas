@@ -217,6 +217,22 @@ export function useDeleteResident() {
   });
 }
 
+export function useAllPreviousTenants() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ['previous_tenants_all'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('previous_tenants')
+        .select('*')
+        .order('archived_at', { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
+  });
+}
+
 export function usePreviousTenants(apartmentId: string) {
   const { user } = useAuth();
   return useQuery({
