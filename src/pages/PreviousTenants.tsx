@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/select';
 import { useAllPreviousTenants } from '@/hooks/useTenants';
 import { buildReceiptPDF } from '@/lib/generateReceiptPDF';
+import { useAuth } from '@/hooks/useAuth';
 import { useApartments } from '@/hooks/useApartments';
 import { useCondominiums } from '@/hooks/useCondominiums';
 import { useContracts } from '@/hooks/useContracts';
@@ -46,6 +47,8 @@ export default function PreviousTenants() {
   const { data: contracts = [] } = useContracts();
   const { data: financialRecords = [] } = useAllFinancialRecords();
   const upsert = useUpsertFinancialRecord();
+  const { user } = useAuth();
+  const adminName = user?.user_metadata?.username || user?.email?.split('@')[0] || 'Administrador';
 
   const [search, setSearch] = useState('');
   const [filterCondo, setFilterCondo] = useState<string>('all');
