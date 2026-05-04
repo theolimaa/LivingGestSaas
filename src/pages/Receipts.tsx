@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import Layout from '@/components/Layout';
 import { MONTHS, YEARS, formatCurrency } from '@/lib/utils-app';
-import { useAllFinancialRecords } from '@/hooks/useFinancial';
+import { useAllFinancialRecords, calcReceived } from '@/hooks/useFinancial';
 import { useCondominiums } from '@/hooks/useCondominiums';
 import { useApartments } from '@/hooks/useApartments';
 import { useTenants, useAllPreviousTenants } from '@/hooks/useTenants';
@@ -180,7 +180,7 @@ export default function Receipts() {
   }
 
   // ── UI ─────────────────────────────────────────────────────────────────────
-  const totalValue = enriched.reduce((s, r) => s + r.rent_value, 0);
+  const totalValue = enriched.reduce((s, r) => s + calcReceived(r), 0);
 
   function Preview() {
     if (!enriched.length) return (
