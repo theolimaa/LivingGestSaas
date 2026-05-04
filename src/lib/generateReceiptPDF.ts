@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
-import { formatCurrency, formatDate } from '@/lib/utils-app';
-import { FinancialRecordDB } from '@/hooks/useFinancial';
+import { formatCurrency, formatDate, getPeriodAndDueDate } from '@/lib/utils-app';
+import { FinancialRecordDB, calcReceived, calcOwed } from '@/hooks/useFinancial';
 
 export interface ReceiptPDFInput {
   record: FinancialRecordDB;
@@ -95,13 +95,19 @@ export function buildReceiptPDF(input: ReceiptPDFInput): Uint8Array {
     .sort((a, b) => a.month.localeCompare(b.month))
     .slice(0, 12);
 
-  const periodLabel = getPeriodLabel(record.month, paymentDay);
-  const rentFormatted = formatCurrency(record.rent_value);
+  const { periodLabel } = getPeriodAndDueDate(record.month, contractStartDate ?? null, paymentDay);
+  const receivedAmt = calcReceived(record);
+  const owedAmt = calcOwed(record);
+  const paidFormatted = formatCurrency(receivedAmt > 0 ? receivedAmt : record.rent_value);
+  const methodLabel = record.payment_method === 'pix' ? ' Forma de pagamento: Pix.' : record.payment_method === 'especie' ? ' Forma de pagamento: Espécie.' : '';
 
   const title = `RECIBO — APTO ${apartmentUnit} — ${tenantFirstName} ${tenantLastName} — ${today}`;
-  const mainText = `Recebi de ${tenantFirstName} ${tenantLastName}, CPF ${
+  let mainText = `Recebi de ${tenantFirstName} ${tenantLastName}, CPF ${
     tenantCpf || '—'
-  } a importância de: ${rentFormatted} referente ao aluguel para o período de ${periodLabel}.`;
+  } a importância de: ${paidFormatted} referente ao aluguel para o período de ${periodLabel}.`;
+  if (record.paid && methodLabel) mainText += methodLabel;
+  if (owedAmt > 0) mainText += ` Saldo devedor: ${formatCurrency(owedAmt)}.`;
+  if (record.observations) mainText += ` Obs: ${record.observations}.`;
   const cautionLine =
     contractCautionPaid && contractCautionValue
       ? `Caução paga no valor de ${formatCurrency(contractCautionValue)}${
@@ -147,16 +153,18 @@ export function buildReceiptPDF(input: ReceiptPDFInput): Uint8Array {
 
   const cols = {
     periodo: 20,
-    valor: 90,
-    pagamento: 115,
-    pago: 145,
-    devendo: 170,
+    valor: 85,
+    forma: 110,
+    pagamento: 130,
+    pago: 155,
+    devendo: 178,
   };
   doc.setFontSize(8);
   doc.setFont('helvetica', 'bold');
   doc.text('Período', cols.periodo, y);
   doc.text('Valor', cols.valor, y);
-  doc.text('Pagamento', cols.pagamento, y);
+  doc.text('Forma', cols.forma, y);
+  doc.text('Data Pag.', cols.pagamento, y);
   doc.text('Pago', cols.pago, y);
   doc.text('Devendo', cols.devendo, y);
   y += 5;
@@ -165,20 +173,22 @@ export function buildReceiptPDF(input: ReceiptPDFInput): Uint8Array {
   let totalOwed = 0;
   doc.setFont('helvetica', 'normal');
   yearRecords.forEach(r => {
-    const val = r.rent_value;
-    const paid = r.paid ? val : 0;
-    const owed = !r.paid ? val : 0;
-    totalPaid += paid;
+    const { periodLabel: pLabel } = getPeriodAndDueDate(r.month, contractStartDate ?? null, paymentDay);
+    const received = calcReceived(r);
+    const owed = calcOwed(r);
+    totalPaid += received;
     totalOwed += owed;
-    doc.text(getPeriodLabel(r.month, paymentDay), cols.periodo, y);
-    doc.text(formatCurrency(val), cols.valor, y);
-    doc.text(
-      r.payment_date ? formatDate(r.payment_date) : '—',
-      cols.pagamento,
-      y
-    );
-    doc.text(paid > 0 ? formatCurrency(paid) : '—', cols.pago, y);
+    const methodStr = r.payment_method === 'pix' ? 'Pix' : r.payment_method === 'especie' ? 'Espécie' : '—';
+    doc.text(doc.splitTextToSize(pLabel, 60)[0], cols.periodo, y);
+    doc.text(formatCurrency(r.rent_value), cols.valor, y);
+    doc.text(r.paid ? methodStr : '—', cols.forma, y);
+    doc.text(r.payment_date ? formatDate(r.payment_date) : '—', cols.pagamento, y);
+    if (r.paid) doc.setTextColor(34, 197, 94);
+    doc.text(received > 0 ? formatCurrency(received) : '—', cols.pago, y);
+    doc.setTextColor(0, 0, 0);
+    if (owed > 0) doc.setTextColor(239, 68, 68);
     doc.text(owed > 0 ? formatCurrency(owed) : '—', cols.devendo, y);
+    doc.setTextColor(0, 0, 0);
     y += 5;
   });
 
