@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Search, History, Building2, Home, AlertCircle,
   CheckCircle2, ChevronDown, ChevronRight, Loader2,
-  Pencil, ArrowLeft,
+  Pencil, FileText, Download,
 } from 'lucide-react';
 import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { useAllPreviousTenants } from '@/hooks/useTenants';
+import { buildReceiptPDF } from '@/lib/generateReceiptPDF';
 import { useApartments } from '@/hooks/useApartments';
 import { useCondominiums } from '@/hooks/useCondominiums';
 import { useContracts } from '@/hooks/useContracts';
@@ -113,6 +114,38 @@ export default function PreviousTenants() {
     });
     setEditModal(null);
     toast.success('Pagamento atualizado!');
+  }
+
+  async function handleDownloadReceipt(r: FinancialRecordDB, pt: typeof enriched[0]) {
+    try {
+      const allAptRecords = pt.records;
+      const pdfBytes = buildReceiptPDF({
+        record: r,
+        apartmentUnit: pt.apt?.unit_number ?? '',
+        condominiumName: pt.condo?.name ?? '',
+        tenantFirstName: pt.first_name,
+        tenantLastName: pt.last_name,
+        tenantCpf: pt.cpf,
+        contractPaymentDay: pt.contract?.payment_day,
+        contractStartDate: pt.contract?.start_date,
+        contractCautionPaid: pt.contract?.caution_paid,
+        contractCautionValue: pt.contract?.caution_value,
+        contractCautionDate: pt.contract?.caution_date,
+        allYearRecords: allAptRecords,
+        adminName,
+      });
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = Object.assign(document.createElement('a'), {
+        href: url,
+        download: `Recibo_${pt.apt?.unit_number ?? 'Apto'}_${pt.first_name}_${pt.last_name}_${r.month}.pdf`.replace(/\s+/g, '_'),
+      });
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      toast.success('Recibo gerado!');
+    } catch (err: any) {
+      toast.error(`Erro ao gerar recibo: ${err.message}`);
+    }
   }
 
   return (
@@ -304,19 +337,30 @@ export default function PreviousTenants() {
                                         {r.payment_date ?? '—'}
                                       </td>
                                       <td className="px-4 py-2.5 text-center">
-                                        <button
-                                          onClick={() => setEditModal({
-                                            record: r,
-                                            paidAmount: String(r.paid_amount ?? r.rent_value),
-                                            date: r.payment_date ?? new Date().toISOString().split('T')[0],
-                                            method: (r.payment_method as PaymentMethod) ?? 'pix',
-                                            debtAmount: owed > 0 ? String(owed) : '',
-                                          })}
-                                          className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                                          title="Editar pagamento"
-                                        >
-                                          <Pencil className="w-3.5 h-3.5" />
-                                        </button>
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            onClick={() => setEditModal({
+                                              record: r,
+                                              paidAmount: String(r.paid_amount ?? r.rent_value),
+                                              date: r.payment_date ?? new Date().toISOString().split('T')[0],
+                                              method: (r.payment_method as PaymentMethod) ?? 'pix',
+                                              debtAmount: owed > 0 ? String(owed) : '',
+                                            })}
+                                            className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                                            title="Editar pagamento"
+                                          >
+                                            <Pencil className="w-3.5 h-3.5" />
+                                          </button>
+                                          {r.paid && (
+                                            <button
+                                              onClick={() => handleDownloadReceipt(r, pt)}
+                                              className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-primary"
+                                              title="Baixar recibo"
+                                            >
+                                              <FileText className="w-3.5 h-3.5" />
+                                            </button>
+                                          )}
+                                        </div>
                                       </td>
                                     </tr>
                                   );
