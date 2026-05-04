@@ -14,7 +14,7 @@ import { MONTHS, YEARS, formatCurrency } from '@/lib/utils-app';
 import { useAllFinancialRecords } from '@/hooks/useFinancial';
 import { useCondominiums } from '@/hooks/useCondominiums';
 import { useApartments } from '@/hooks/useApartments';
-import { useTenants } from '@/hooks/useTenants';
+import { useTenants, useAllPreviousTenants } from '@/hooks/useTenants';
 import { useContracts } from '@/hooks/useContracts';
 import { useAuth } from '@/hooks/useAuth';
 import { buildReceiptPDF } from '@/lib/generateReceiptPDF';
@@ -35,6 +35,7 @@ export default function Receipts() {
   const { data: condominiums = [] } = useCondominiums();
   const { data: apartments = [] } = useApartments();
   const { data: allTenants = [] } = useTenants();
+  const { data: previousTenants = [] } = useAllPreviousTenants();
   const { data: contracts = [] } = useContracts();
   const drive = useGoogleDrive();
 
@@ -65,12 +66,21 @@ export default function Receipts() {
 
   const enriched = matchingRecords.map(r => {
     const apt = apartments.find(a => a.id === r.apartment_id);
+    // Busca em ativos primeiro, depois em anteriores (via original_id)
+    const activeTenant = allTenants.find(t => t.id === r.tenant_id);
+    const prevTenant = !activeTenant
+      ? previousTenants.find(pt => pt.original_id === r.tenant_id)
+      : null;
+    const tenant = activeTenant ?? (prevTenant
+      ? { id: r.tenant_id ?? '', first_name: prevTenant.first_name, last_name: prevTenant.last_name, cpf: prevTenant.cpf }
+      : null);
     return {
       ...r,
       apt,
       condo: condominiums.find(c => c.id === apt?.condominium_id),
-      tenant: allTenants.find(t => t.id === r.tenant_id),
+      tenant,
       contract: contracts.find(c => c.id === r.contract_id),
+      isFormer: !activeTenant && !!prevTenant,
     };
   }).filter(r => r.apt && r.tenant);
 
