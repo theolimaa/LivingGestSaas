@@ -110,14 +110,16 @@ export default function MonthlyReport() {
       const totalPaid = condoRecords.filter(r => r.computedStatus === 'paid').reduce((s, r) => s + calcReceived(r), 0);
       const totalPending = condoRecords.filter(r => r.computedStatus === 'pending').reduce((s, r) => s + r.rent_value, 0);
       const totalOverdue = condoRecords.filter(r => r.computedStatus === 'overdue').reduce((s, r) => s + r.rent_value, 0);
+      const totalOwed = rows.filter(r => r.status === 'paid' && r.record).reduce((s, r) => s + calcOwed(r.record!), 0);
       const occupied = condoApts.filter(apt => condoRecords.some(r => r.apartment_id === apt.id)).length;
 
-      return { condo, rows, totalPaid, totalPending, totalOverdue, occupied, total: condoApts.length };
+      return { condo, rows, totalPaid, totalPending, totalOverdue, totalOwed, occupied, total: condoApts.length };
     });
 
   const grandPaid = grouped.reduce((s, g) => s + g.totalPaid, 0);
   const grandPending = grouped.reduce((s, g) => s + g.totalPending, 0);
   const grandOverdue = grouped.reduce((s, g) => s + g.totalOverdue, 0);
+  const grandOwed = grouped.reduce((s, g) => s + g.totalOwed, 0);
 
   function generatePDF() {
     const doc = new jsPDF();
@@ -148,8 +150,9 @@ export default function MonthlyReport() {
     y += 6;
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(34, 197, 94); doc.text(`Recebido: ${formatCurrency(grandPaid)}`, ml, y);
-    doc.setTextColor(234, 179, 8); doc.text(`A Receber: ${formatCurrency(grandPending)}`, ml + 60, y);
-    doc.setTextColor(239, 68, 68); doc.text(`Inadimplente: ${formatCurrency(grandOverdue)}`, ml + 120, y);
+    doc.setTextColor(234, 179, 8); doc.text(`A Receber: ${formatCurrency(grandPending)}`, ml + 55, y);
+    doc.setTextColor(239, 68, 68); doc.text(`Inadimplente: ${formatCurrency(grandOverdue)}`, ml + 110, y);
+    if (grandOwed > 0) { doc.setTextColor(161, 98, 7); doc.text(`Devendo: ${formatCurrency(grandOwed)}`, ml + 160, y); }
     y += 10;
     addLine([180, 180, 180]);
 
@@ -159,14 +162,15 @@ export default function MonthlyReport() {
       doc.text(g.condo.name, ml, y);
       doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(100, 100, 100);
       doc.text(`${g.occupied}/${g.total} ocupados`, ml + 90, y);
-      doc.setTextColor(34, 197, 94); doc.text(`Rec: ${formatCurrency(g.totalPaid)}`, ml + 130, y);
-      doc.setTextColor(239, 68, 68); doc.text(`Inad: ${formatCurrency(g.totalOverdue)}`, ml + 160, y);
+      doc.setTextColor(34, 197, 94); doc.text(`Rec: ${formatCurrency(g.totalPaid)}`, ml + 115, y);
+      doc.setTextColor(239, 68, 68); doc.text(`Inad: ${formatCurrency(g.totalOverdue)}`, ml + 145, y);
+      if (g.totalOwed > 0) { doc.setTextColor(161, 98, 7); doc.text(`Dev: ${formatCurrency(g.totalOwed)}`, ml + 173, y); }
       y += 6;
       doc.setFillColor(230, 235, 245);
       doc.rect(ml - 2, y - 3, 182, 6, 'F');
       doc.setFontSize(7.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(60, 60, 60);
-      doc.text('Apto', ml, y + 1); doc.text('Inquilino', ml + 18, y + 1); doc.text('Valor', ml + 100, y + 1);
-      doc.text('Pagamento', ml + 125, y + 1); doc.text('Status', ml + 160, y + 1);
+      doc.text('Apto', ml, y + 1); doc.text('Inquilino', ml + 18, y + 1); doc.text('Valor', ml + 95, y + 1);
+      doc.text('Pagamento', ml + 117, y + 1); doc.text('Devendo', ml + 145, y + 1); doc.text('Status', ml + 168, y + 1);
       y += 7;
 
       for (const row of g.rows) {
@@ -175,14 +179,19 @@ export default function MonthlyReport() {
         doc.text(row.apt.unit_number, ml, y);
         const tenantName = row.tenant ? `${row.tenant.first_name} ${row.tenant.last_name}` : '—';
         doc.text(doc.splitTextToSize(tenantName, 75)[0], ml + 18, y);
-        doc.text(row.record ? formatCurrency(row.record.rent_value) : '—', ml + 100, y);
-        doc.text(row.record?.payment_date ?? '—', ml + 125, y);
+        doc.text(row.record ? formatCurrency(row.record.rent_value) : '—', ml + 95, y);
+        doc.text(row.record?.payment_date ?? '—', ml + 117, y);
+        // Devendo
+        const owedAmt = row.record ? calcOwed(row.record) : 0;
+        if (owedAmt > 0) { doc.setTextColor(161, 98, 7); doc.text(formatCurrency(owedAmt), ml + 145, y); doc.setTextColor(30, 30, 30); }
+        else { doc.setTextColor(150, 150, 150); doc.text('—', ml + 145, y); doc.setTextColor(30, 30, 30); }
+        // Status
         if (row.status === 'paid') doc.setTextColor(34, 197, 94);
         else if (row.status === 'overdue') doc.setTextColor(239, 68, 68);
         else if (row.status === 'pending') doc.setTextColor(234, 179, 8);
         else doc.setTextColor(150, 150, 150);
         const statusLabel = row.status === 'paid' ? 'Pago' : row.status === 'overdue' ? 'Inadimplente' : row.status === 'pending' ? 'A Receber' : row.isVacant ? 'Vago' : '—';
-        doc.text(statusLabel, ml + 160, y);
+        doc.text(statusLabel, ml + 168, y);
         doc.setTextColor(30, 30, 30);
         y += 5;
       }
@@ -264,6 +273,7 @@ export default function MonthlyReport() {
                     <span style={{ color: 'hsl(var(--paid))' }}>{formatCurrency(g.totalPaid)} recebido</span>
                     {g.totalPending > 0 && <span style={{ color: 'hsl(var(--warning))' }}>{formatCurrency(g.totalPending)} a receber</span>}
                     {g.totalOverdue > 0 && <span style={{ color: 'hsl(var(--overdue))' }}>{formatCurrency(g.totalOverdue)} inad.</span>}
+                    {g.totalOwed > 0 && <span style={{ color: 'hsl(var(--warning))' }}>{formatCurrency(g.totalOwed)} devendo</span>}
                   </div>
                 </div>
                 <table className="w-full text-xs sm:text-sm">
@@ -273,6 +283,7 @@ export default function MonthlyReport() {
                       <th className="text-left px-3 py-2 hidden sm:table-cell">Inquilino</th>
                       <th className="text-right px-3 py-2">Valor</th>
                       <th className="text-center px-3 py-2 hidden sm:table-cell">Pagamento</th>
+                      <th className="text-right px-3 py-2 hidden sm:table-cell" style={{ color: 'hsl(var(--warning))' }}>Devendo</th>
                       <th className="text-center px-3 py-2">Status</th>
                     </tr>
                   </thead>
@@ -288,6 +299,11 @@ export default function MonthlyReport() {
                         </td>
                         <td className="px-3 py-2 text-center text-xs text-muted-foreground hidden sm:table-cell">
                           {row.record?.payment_date ?? '—'}
+                        </td>
+                        <td className="px-3 py-2 text-right font-semibold hidden sm:table-cell">
+                          {row.record && calcOwed(row.record) > 0
+                            ? <span style={{ color: 'hsl(var(--warning))' }}>{formatCurrency(calcOwed(row.record))}</span>
+                            : <span className="text-muted-foreground">—</span>}
                         </td>
                         <td className="px-3 py-2 text-center">
                           {row.status === 'paid' && <span className="badge-active">Pago</span>}
