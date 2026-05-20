@@ -104,13 +104,16 @@ export default function PreviousTenants() {
     const debtAmt = parseFloat(editModal.debtAmount);
     if (isNaN(paidAmt)) { toast.error('Valor inválido.'); return; }
 
-    // Se debtAmount foi preenchido explicitamente, ajusta paid_amount para rent_value - debt
     const effectivePaid = !isNaN(debtAmt)
       ? Math.max(0, editModal.record.rent_value - debtAmt)
       : paidAmt;
 
+    // Remover campos de join (apartments, condominiums) que vêm do useAllFinancialRecords
+    // e que não são colunas reais de financial_records
+    const { apartments: _apt, ...cleanRecord } = editModal.record as FinancialRecordDB & { apartments?: unknown };
+
     await upsert.mutateAsync({
-      ...editModal.record,
+      ...cleanRecord,
       paid: true,
       paid_amount: effectivePaid,
       payment_date: editModal.date,
