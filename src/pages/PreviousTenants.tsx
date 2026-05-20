@@ -72,7 +72,8 @@ export default function PreviousTenants() {
       const contract = contracts.find(c => c.tenant_id === pt.original_id);
       // Registros financeiros vinculados ao tenant original
       const records = financialRecords.filter(r => r.tenant_id === pt.original_id);
-      const totalOwed = records.reduce((s, r) => s + calcOwed(r), 0);
+      // Para ex-inquilinos: não pagos = dívida total; pagos parciais = saldo devedor
+      const totalOwed = records.reduce((s, r) => !r.paid ? s + r.rent_value : s + calcOwed(r), 0);
       const totalReceived = records.reduce((s, r) => s + calcReceived(r), 0);
       return { ...pt, apt, condo, contract, records, totalOwed, totalReceived };
     });
@@ -239,7 +240,7 @@ export default function PreviousTenants() {
                         {hasDebt ? (
                           <Badge color="red">
                             <AlertCircle className="w-3 h-3" />
-                            Devendo {formatCurrency(pt.totalOwed)}
+                            {formatCurrency(pt.totalOwed)} em aberto
                           </Badge>
                         ) : (
                           <Badge color="green">
@@ -313,7 +314,8 @@ export default function PreviousTenants() {
                               {pt.records
                                 .sort((a, b) => a.month.localeCompare(b.month))
                                 .map(r => {
-                                  const owed = calcOwed(r);
+                                  // Ex-inquilino: não pagos são dívidas (rent_value), pagos usam calcOwed
+                                  const owed = r.paid ? calcOwed(r) : r.rent_value;
                                   const received = calcReceived(r);
                                   const { periodLabel } = getPeriodAndDueDate(
                                     r.month,
@@ -329,7 +331,7 @@ export default function PreviousTenants() {
                                       <td className="px-4 py-2.5 text-right">
                                         {r.paid
                                           ? <span style={{ color: 'hsl(var(--paid))' }}>{formatCurrency(received)}</span>
-                                          : <span className="text-muted-foreground">—</span>}
+                                          : <span className="text-muted-foreground text-xs italic">Não pago</span>}
                                       </td>
                                       <td className="px-4 py-2.5 text-right">
                                         {owed > 0
@@ -344,17 +346,18 @@ export default function PreviousTenants() {
                                           <button
                                             onClick={() => setEditModal({
                                               record: r,
-                                              paidAmount: String(r.paid_amount ?? r.rent_value),
+                                              // Não pago: começa com 0 para o usuário registrar quanto recebeu
+                                              paidAmount: r.paid ? String(r.paid_amount ?? r.rent_value) : '0',
                                               date: r.payment_date ?? new Date().toISOString().split('T')[0],
                                               method: (r.payment_method as PaymentMethod) ?? 'pix',
-                                              debtAmount: owed > 0 ? String(owed) : '',
+                                              debtAmount: '',
                                             })}
                                             className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
                                             title="Editar pagamento"
                                           >
                                             <Pencil className="w-3.5 h-3.5" />
                                           </button>
-                                          {r.paid && (
+                                          {r.paid && r.payment_date && (
                                             <button
                                               onClick={() => handleDownloadReceipt(r, pt)}
                                               className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-primary"
@@ -378,8 +381,10 @@ export default function PreviousTenants() {
                                 <td className="px-4 py-2 text-right font-bold text-sm" style={{ color: 'hsl(var(--paid))' }}>
                                   {formatCurrency(pt.totalReceived)}
                                 </td>
-                                <td className="px-4 py-2 text-right font-bold text-sm text-destructive">
-                                  {pt.totalOwed > 0 ? formatCurrency(pt.totalOwed) : '—'}
+                                <td className="px-4 py-2 text-right font-bold text-sm">
+                                  {pt.totalOwed > 0
+                                    ? <span className="text-destructive">{formatCurrency(pt.totalOwed)}</span>
+                                    : <span className="text-muted-foreground">—</span>}
                                 </td>
                                 <td colSpan={2} />
                               </tr>
@@ -402,7 +407,7 @@ export default function PreviousTenants() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Pencil className="w-5 h-5 text-primary" />
-              Editar Pagamento
+              {editModal?.record.paid ? 'Editar Pagamento' : 'Registrar Pagamento'}
             </DialogTitle>
           </DialogHeader>
           {editModal && (
