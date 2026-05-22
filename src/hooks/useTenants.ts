@@ -121,7 +121,10 @@ export function useDeleteTenant() {
       qc.invalidateQueries({ queryKey: ['financial_records_all'] });
       toast.success('Inquilino excluído!');
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: unknown) => {
+      const msg = (e && typeof e === 'object' && 'message' in e) ? (e as any).message : String(e);
+      toast.error(`Erro ao excluir: ${msg}`, { duration: 10000 });
+    },
   });
 }
 
