@@ -273,7 +273,7 @@ export function useAllDebtAgreements() {
         .from('debt_agreements')
         .select('*')
         .order('created_at', { ascending: false });
-      if (error) throw error;
+      if (error) { console.warn('debt_agreements table:', error.message); return [] as DebtAgreement[]; }
       return data as DebtAgreement[];
     },
     enabled: !!user,
@@ -289,7 +289,7 @@ export function useAllDebtInstallments() {
         .from('debt_installments')
         .select('*, debt_agreements(previous_tenant_id, apartment_id)')
         .order('payment_date', { ascending: false });
-      if (error) throw error;
+      if (error) { console.warn('debt_installments table:', error.message); return [] as any[]; }
       return data as (DebtInstallment & { debt_agreements: { previous_tenant_id: string; apartment_id: string } })[];
     },
     enabled: !!user,
