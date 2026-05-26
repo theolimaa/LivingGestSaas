@@ -16,6 +16,7 @@ import { useApartments } from '@/hooks/useApartments';
 import { useAllFinancialRecords, FinancialRecordDB, calcReceived, calcOwed } from '@/hooks/useFinancial';
 import { useContracts } from '@/hooks/useContracts';
 import { useTenants, useAllPreviousTenants } from '@/hooks/useTenants';
+import { useAllDebtInstallments } from '@/hooks/useDebtAgreements';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
  
 function getStatus(
@@ -196,6 +197,7 @@ export default function Dashboard() {
   const { data: contracts = [] } = useContracts();
   const { data: allTenants = [] } = useTenants();
   const { data: previousTenants = [] } = useAllPreviousTenants();
+  const { data: debtInstallments = [] } = useAllDebtInstallments();
   const deleteCondo = useDeleteCondominium();
  
   const { selectedYear, selectedMonth } = state;
@@ -267,6 +269,14 @@ export default function Dashboard() {
     isFormer: previousTenantIds.has(r.tenant_id ?? ''),
   }));
   const totalOwed = debtRecords.reduce((s, r) => s + calcOwed(r), 0);
+
+  // Parcelas de acordos pagas no mês selecionado contam como receita
+  const paidInstallmentsThisMonth = debtInstallments.filter(inst => {
+    if (!inst.paid || !inst.payment_date) return false;
+    if (selectedMonthKey) return inst.payment_date.startsWith(selectedMonthKey);
+    return inst.payment_date.startsWith(String(selectedYear));
+  });
+  const installmentsRevenue = paidInstallmentsThisMonth.reduce((s, i) => s + i.amount, 0);
  
   const chartData = MONTHS.map((month, idx) => {
     const monthKey = `${chartYear}-${String(idx + 1).padStart(2, '0')}`;
