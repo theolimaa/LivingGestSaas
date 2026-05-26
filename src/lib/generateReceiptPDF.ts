@@ -215,3 +215,157 @@ export function buildReceiptPDF(input: ReceiptPDFInput): Uint8Array {
 
   return doc.output('arraybuffer') as unknown as Uint8Array;
 }
+
+export interface DebtAgreementReceiptParams {
+  agreement: {
+    id: string;
+    original_amount: number;
+    agreed_amount: number;
+    installment_count: number;
+    installment_value: number;
+    notes: string | null;
+    status: string;
+  };
+  installments: Array<{
+    installment_number: number;
+    amount: number;
+    due_date: string | null;
+    paid: boolean;
+    payment_date: string | null;
+    payment_method: string | null;
+  }>;
+  tenantFirstName: string;
+  tenantLastName: string;
+  tenantCpf: string | null;
+  apartmentUnit: string;
+  condominiumName: string;
+  adminName: string;
+  // Se quisermos gerar recibo de uma parcela específica
+  highlightInstallment?: number;
+}
+
+export function buildDebtAgreementReceiptPDF(p: DebtAgreementReceiptParams): Uint8Array {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const ml = 20; // margin left
+  const pw = 170; // page width content
+  const today = formatDate(new Date().toISOString().split('T')[0]);
+
+  const paidInstallments = p.installments.filter(i => i.paid);
+  const paidTotal = paidInstallments.reduce((s, i) => s + i.amount, 0);
+  const remaining = p.agreement.agreed_amount - paidTotal;
+
+  doc.setFontSize(8);
+  doc.setTextColor(120, 120, 120);
+  const code = `DA${p.apartmentUnit.replace(/[^A-Z0-9]/gi, '')}${String(p.agreement.installment_count).padStart(2,'0')}${today.replace(/\//g,'')}`;
+  doc.text(code, ml, 15);
+
+  doc.setFontSize(13);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(30, 30, 30);
+  const title = p.highlightInstallment
+    ? `RECIBO DE ACORDO — PARCELA ${p.highlightInstallment}/${p.agreement.installment_count} — APTO ${p.apartmentUnit}`
+    : `ACORDO DE DÍVIDA — APTO ${p.apartmentUnit} — ${p.tenantFirstName} ${p.tenantLastName}`;
+  const titleLines = doc.splitTextToSize(title, pw);
+  doc.text(titleLines, ml, 22);
+  let y = 22 + titleLines.length * 6 + 4;
+
+  doc.setFontSize(8);
+  doc.setTextColor(120, 120, 120);
+  doc.text(`${p.condominiumName} · Emitido em ${today}`, ml, y);
+  y += 8;
+
+  // Divider
+  doc.setDrawColor(220, 220, 220);
+  doc.line(ml, y, ml + pw, y);
+  y += 6;
+
+  // Main text
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(30, 30, 30);
+  let mainText: string;
+  if (p.highlightInstallment) {
+    const inst = p.installments.find(i => i.installment_number === p.highlightInstallment);
+    const method = inst?.payment_method === 'pix' ? 'Pix' : inst?.payment_method === 'especie' ? 'Espécie' : '';
+    mainText = `Recebi de ${p.tenantFirstName} ${p.tenantLastName}, CPF ${p.tenantCpf || '—'}, a importância de ${formatCurrency(inst?.amount ?? p.agreement.installment_value)} referente à parcela ${p.highlightInstallment}/${p.agreement.installment_count} do acordo de dívida do apartamento ${p.apartmentUnit}.`;
+    if (method && inst?.payment_date) mainText += ` Pago via ${method} em ${formatDate(inst.payment_date)}.`;
+    if (remaining - (inst?.amount ?? 0) > 0) mainText += ` Saldo restante do acordo: ${formatCurrency(Math.max(0, remaining - (inst?.amount ?? 0)))}.`;
+  } else {
+    mainText = `Aviso de acordo de dívida para ${p.tenantFirstName} ${p.tenantLastName}, CPF ${p.tenantCpf || '—'}. Dívida original: ${formatCurrency(p.agreement.original_amount)}. Valor acordado: ${formatCurrency(p.agreement.agreed_amount)} em ${p.agreement.installment_count} parcelas de ${formatCurrency(p.agreement.installment_value)}.`;
+    if (p.agreement.notes) mainText += ` Obs: ${p.agreement.notes}.`;
+    if (remaining > 0) mainText += ` Saldo em aberto: ${formatCurrency(remaining)}.`;
+  }
+  const mainLines = doc.splitTextToSize(mainText, pw);
+  doc.text(mainLines, ml, y);
+  y += mainLines.length * 5 + 8;
+
+  // Divider
+  doc.line(ml, y, ml + pw, y);
+  y += 6;
+
+  // Installments table
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(30, 30, 30);
+  doc.text('Parcelas do Acordo', ml, y);
+  y += 5;
+
+  // Header
+  doc.setFontSize(8);
+  doc.setFillColor(240, 240, 240);
+  doc.rect(ml, y, pw, 5, 'F');
+  doc.setTextColor(80, 80, 80);
+  doc.text('#', ml + 2, y + 3.5);
+  doc.text('Valor', ml + 15, y + 3.5);
+  doc.text('Vencimento', ml + 45, y + 3.5);
+  doc.text('Forma', ml + 85, y + 3.5);
+  doc.text('Pagamento', ml + 115, y + 3.5);
+  doc.text('Status', ml + 148, y + 3.5);
+  y += 7;
+
+  doc.setFont('helvetica', 'normal');
+  p.installments.forEach(inst => {
+    const isHighlight = inst.installment_number === p.highlightInstallment;
+    if (isHighlight) {
+      doc.setFillColor(254, 249, 231);
+      doc.rect(ml, y - 1, pw, 5.5, 'F');
+    }
+    doc.setTextColor(30, 30, 30);
+    doc.text(String(inst.installment_number), ml + 2, y + 3);
+    doc.text(formatCurrency(inst.amount), ml + 15, y + 3);
+    doc.text(inst.due_date ? formatDate(inst.due_date) : '—', ml + 45, y + 3);
+    const method = inst.payment_method === 'pix' ? 'Pix' : inst.payment_method === 'especie' ? 'Espécie' : '—';
+    doc.text(inst.paid ? method : '—', ml + 85, y + 3);
+    doc.text(inst.payment_date ? formatDate(inst.payment_date) : '—', ml + 115, y + 3);
+    if (inst.paid) { doc.setTextColor(34, 197, 94); doc.text('Pago', ml + 148, y + 3); }
+    else { doc.setTextColor(239, 68, 68); doc.text('Em aberto', ml + 148, y + 3); }
+    doc.setTextColor(30, 30, 30);
+    y += 5.5;
+    if (y > 270) { doc.addPage(); y = 20; }
+  });
+
+  y += 4;
+  doc.setDrawColor(220, 220, 220);
+  doc.line(ml, y, ml + pw, y);
+  y += 5;
+
+  // Summary
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(34, 197, 94);
+  doc.text(`Total pago: ${formatCurrency(paidTotal)}`, ml + pw - 70, y);
+  if (remaining > 0) {
+    doc.setTextColor(239, 68, 68);
+    doc.text(`Em aberto: ${formatCurrency(remaining)}`, ml + pw - 70, y + 5);
+    y += 5;
+  }
+  y += 10;
+
+  // Footer
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(120, 120, 120);
+  doc.text(`Fortaleza, ${today} — ${p.adminName} — Documento de acordo de dívida.`, ml, y);
+
+  return doc.output('arraybuffer') as unknown as Uint8Array;
+}
