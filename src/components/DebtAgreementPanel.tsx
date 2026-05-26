@@ -260,6 +260,10 @@ function AgreementCard({
                 onClick={() => cancelAgreement.mutate({ id: agreement.id, previousTenantId })}>
                 <XCircle className="w-3 h-3" /> Cancelar
               </Button>
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-primary hover:text-primary"
+                onClick={() => downloadReceipt()}>
+                <FileText className="w-3 h-3" /> Doc. Acordo
+              </Button>
             </div>
           )}
         </div>
