@@ -17,6 +17,8 @@ export interface ReceiptPDFInput {
   allYearRecords: FinancialRecordDB[];
   adminName: string;
   today?: string;
+  debtNotice?: boolean;
+  totalOwed?: number;
 }
 
 export function generateReceiptCode(
@@ -69,6 +71,8 @@ export function buildReceiptPDF(input: ReceiptPDFInput): Uint8Array {
     contractCautionDate,
     allYearRecords,
     adminName,
+    debtNotice = false,
+    totalOwed: totalOwedParam,
   } = input;
 
   const paymentDay = contractPaymentDay ?? 1;
@@ -108,8 +112,8 @@ export function buildReceiptPDF(input: ReceiptPDFInput): Uint8Array {
     mainText = `Aviso de cobrança para ${tenantFirstName} ${tenantLastName}, CPF ${
       tenantCpf || '—'
     }. Referente ao aluguel do período ${periodLabel}, no valor de ${formatCurrency(record.rent_value)}, que consta em aberto.`;
-    if (totalOwed && totalOwed > record.rent_value) {
-      mainText += ` Total em débito: ${formatCurrency(totalOwed)}.`;
+    if (totalOwedParam && totalOwedParam > record.rent_value) {
+      mainText += ` Total em débito: ${formatCurrency(totalOwedParam)}.`;
     }
   } else {
     mainText = `Recebi de ${tenantFirstName} ${tenantLastName}, CPF ${
