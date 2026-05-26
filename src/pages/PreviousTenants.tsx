@@ -16,8 +16,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { useAllPreviousTenants } from '@/hooks/useTenants';
+import { buildReceiptPDF } from '@/lib/generateReceiptPDF';
 import { DebtAgreementPanel } from '@/components/DebtAgreementPanel';
-import ReceiptModalDB from '@/components/apartment/ReceiptModalDB';
 import { useAllDebtAgreements } from '@/hooks/useDebtAgreements';
 import { useAuth } from '@/hooks/useAuth';
 import { useApartments } from '@/hooks/useApartments';
@@ -56,12 +56,6 @@ export default function PreviousTenants() {
   const [search, setSearch] = useState('');
   const [filterCondo, setFilterCondo] = useState<string>('all');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-
-  // Modal de recibo interativo (igual ao dos apartamentos)
-  const [receiptModal, setReceiptModal] = useState<{
-    record: FinancialRecordDB;
-    pt: typeof enriched[0];
-  } | null>(null);
 
   // Modal de edição de pagamento
   const [editModal, setEditModal] = useState<{
@@ -130,8 +124,41 @@ export default function PreviousTenants() {
     toast.success('Pagamento atualizado!');
   }
 
-  function handleDownloadReceipt(r: FinancialRecordDB, pt: typeof enriched[0]) {
-    setReceiptModal({ record: r, pt });
+  async function handleDownloadReceipt(r: FinancialRecordDB, pt: typeof enriched[0]) {
+    try {
+      const allAptRecords = pt.records;
+      const isDebtNotice = !r.paid;
+      const totalOwed = pt.totalOwed;
+      const pdfBytes = buildReceiptPDF({
+        record: r,
+        apartmentUnit: pt.apt?.unit_number ?? '',
+        condominiumName: pt.condo?.name ?? '',
+        tenantFirstName: pt.first_name,
+        tenantLastName: pt.last_name,
+        tenantCpf: pt.cpf,
+        contractPaymentDay: pt.contract?.payment_day,
+        contractStartDate: pt.contract?.start_date,
+        contractCautionPaid: pt.contract?.caution_paid,
+        contractCautionValue: pt.contract?.caution_value,
+        contractCautionDate: pt.contract?.caution_date,
+        allYearRecords: allAptRecords,
+        adminName,
+        debtNotice: isDebtNotice,
+        totalOwed: isDebtNotice ? totalOwed : undefined,
+      });
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const prefix = isDebtNotice ? 'Aviso' : 'Recibo';
+      const a = Object.assign(document.createElement('a'), {
+        href: url,
+        download: `${prefix}_${pt.apt?.unit_number ?? 'Apto'}_${pt.first_name}_${pt.last_name}_${r.month}.pdf`.replace(/\s+/g, '_'),
+      });
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      toast.success(isDebtNotice ? 'Aviso de cobrança gerado!' : 'Recibo gerado!');
+    } catch (err: any) {
+      toast.error(`Erro ao gerar: ${err.message}`);
+    }
   }
 
   return (
@@ -306,13 +333,21 @@ export default function PreviousTenants() {
                                   // Ex-inquilino: não pagos = dívida do período, pagos = saldo calcOwed
                                   const owed = r.paid ? calcOwed(r) : (pt.hasActiveAgreement ? 0 : r.rent_value);
                                   const received = calcReceived(r);
-                                  const { periodLabel } = getPeriodAndDueDate(
+                                  const { periodLabel: basePeriodLabel } = getPeriodAndDueDate(
                                     r.month,
                                     contract?.start_date ?? null,
                                     contract?.payment_day ?? 1,
                                     contract?.desired_payment_day,
                                     contract?.desired_payment_date,
                                   );
+                                  // Para o último período de contrato encerrado: substituir fim do período pela data real de saída
+                                  let periodLabel = basePeriodLabel;
+                                  if (contract?.end_date && r.month === contract.end_date.substring(0, 7)) {
+                                    const ed = new Date(contract.end_date + 'T12:00:00');
+                                    const edStr = `${String(ed.getDate()).padStart(2,'0')}/${String(ed.getMonth()+1).padStart(2,'0')}/${ed.getFullYear()}`;
+                                    const parts = basePeriodLabel.split(' a ');
+                                    if (parts.length === 2) periodLabel = `${parts[0]} a ${edStr}`;
+                                  }
                                   return (
                                     <tr key={r.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20">
                                       <td className="px-4 py-2.5 text-xs font-medium">{periodLabel}</td>
@@ -402,32 +437,6 @@ export default function PreviousTenants() {
           </div>
         )}
       </div>
-
-      {/* Modal de recibo interativo */}
-      {receiptModal && receiptModal.pt.apt && (
-        <ReceiptModalDB
-          open={!!receiptModal}
-          onClose={() => setReceiptModal(null)}
-          record={receiptModal.record}
-          apartment={receiptModal.pt.apt as any}
-          tenant={{
-            id: receiptModal.pt.original_id ?? '',
-            first_name: receiptModal.pt.first_name,
-            last_name: receiptModal.pt.last_name,
-            cpf: receiptModal.pt.cpf,
-            email: receiptModal.pt.email,
-            phone: receiptModal.pt.phone,
-            birth_date: null,
-            apartment_id: receiptModal.pt.apartment_id,
-            archived_at: receiptModal.pt.archived_at,
-            created_at: '',
-            updated_at: '',
-          } as any}
-          contract={receiptModal.pt.contract as any}
-          allRecords={receiptModal.pt.records}
-          condominiumName={receiptModal.pt.condo?.name ?? ''}
-        />
-      )}
 
       {/* Modal edição de pagamento */}
       <Dialog open={!!editModal} onOpenChange={() => setEditModal(null)}>
