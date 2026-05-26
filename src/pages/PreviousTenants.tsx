@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Search, History, Building2, Home, AlertCircle,
   CheckCircle2, ChevronDown, ChevronRight, Loader2,
-  Pencil, FileText, Download,
+  Pencil, FileText, Download, Handshake,
 } from 'lucide-react';
 import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,7 @@ import {
 import { useAllPreviousTenants } from '@/hooks/useTenants';
 import { buildReceiptPDF } from '@/lib/generateReceiptPDF';
 import { DebtAgreementPanel } from '@/components/DebtAgreementPanel';
+import { useAllDebtAgreements } from '@/hooks/useDebtAgreements';
 import { useAuth } from '@/hooks/useAuth';
 import { useApartments } from '@/hooks/useApartments';
 import { useCondominiums } from '@/hooks/useCondominiums';
@@ -48,6 +49,7 @@ export default function PreviousTenants() {
   const { data: contracts = [] } = useContracts();
   const { data: financialRecords = [] } = useAllFinancialRecords();
   const upsert = useUpsertFinancialRecord();
+  const { data: allAgreements = [] } = useAllDebtAgreements();
   const { user } = useAuth();
   const adminName = user?.user_metadata?.username || user?.email?.split('@')[0] || 'Administrador';
 
@@ -73,10 +75,14 @@ export default function PreviousTenants() {
       const contract = contracts.find(c => c.tenant_id === pt.original_id);
       // Registros financeiros vinculados ao tenant original
       const records = financialRecords.filter(r => r.tenant_id === pt.original_id);
-      // Ex-inquilino: registros não pagos = dívida total; pagos parciais = saldo devedor
-      const totalOwed = records.reduce((s, r) => !r.paid ? s + r.rent_value : s + calcOwed(r), 0);
+      const hasActiveAgreement = allAgreements.some(a => a.previous_tenant_id === pt.id && a.status === 'active');
+      // Se há acordo ativo, os registros não pagos fazem parte do acordo (não contam como "devendo" individual)
+      // O saldo do acordo em si é mostrado no painel de acordos
+      const rawOwed = records.reduce((s, r) => !r.paid ? s + r.rent_value : s + calcOwed(r), 0);
+      const totalOwed = rawOwed;
       const totalReceived = records.reduce((s, r) => s + calcReceived(r), 0);
-      return { ...pt, apt, condo, contract, records, totalOwed, totalReceived };
+      const hasActiveAgreement = allAgreements.some(a => a.previous_tenant_id === pt.id && a.status === 'active');
+      return { ...pt, apt, condo, contract, records, totalOwed, totalReceived, hasActiveAgreement };
     });
   }, [previousTenants, apartments, condominiums, contracts, financialRecords]);
 
@@ -244,10 +250,17 @@ export default function PreviousTenants() {
                           {pt.first_name} {pt.last_name}
                         </p>
                         {hasDebt ? (
-                          <Badge color="red">
-                            <AlertCircle className="w-3 h-3" />
-                            Devendo {formatCurrency(pt.totalOwed)}
-                          </Badge>
+                          pt.hasActiveAgreement ? (
+                            <Badge color="gray">
+                              <Handshake className="w-3 h-3" />
+                              Acordo em andamento
+                            </Badge>
+                          ) : (
+                            <Badge color="red">
+                              <AlertCircle className="w-3 h-3" />
+                              Devendo {formatCurrency(pt.totalOwed)}
+                            </Badge>
+                          )
                         ) : (
                           <Badge color="green">
                             <CheckCircle2 className="w-3 h-3" />
@@ -321,7 +334,7 @@ export default function PreviousTenants() {
                                 .sort((a, b) => a.month.localeCompare(b.month))
                                 .map(r => {
                                   // Ex-inquilino: não pagos = dívida do período, pagos = saldo calcOwed
-                                  const owed = r.paid ? calcOwed(r) : r.rent_value;
+                                  const owed = r.paid ? calcOwed(r) : (pt.hasActiveAgreement ? 0 : r.rent_value);
                                   const received = calcReceived(r);
                                   const { periodLabel } = getPeriodAndDueDate(
                                     r.month,
@@ -405,6 +418,11 @@ export default function PreviousTenants() {
                         previousTenantId={pt.id}
                         apartmentId={pt.apartment_id}
                         totalOwed={pt.totalOwed}
+                        tenantFirstName={pt.first_name}
+                        tenantLastName={pt.last_name}
+                        tenantCpf={pt.cpf}
+                        apartmentUnit={pt.apt?.unit_number ?? ''}
+                        condominiumName={pt.condo?.name ?? ''}
                       />
                     </div>
                   )}
