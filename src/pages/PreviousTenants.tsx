@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/select';
 import { useAllPreviousTenants } from '@/hooks/useTenants';
 import { buildReceiptPDF } from '@/lib/generateReceiptPDF';
+import { DebtAgreementPanel } from '@/components/DebtAgreementPanel';
 import { useAuth } from '@/hooks/useAuth';
 import { useApartments } from '@/hooks/useApartments';
 import { useCondominiums } from '@/hooks/useCondominiums';
@@ -72,8 +73,7 @@ export default function PreviousTenants() {
       const contract = contracts.find(c => c.tenant_id === pt.original_id);
       // Registros financeiros vinculados ao tenant original
       const records = financialRecords.filter(r => r.tenant_id === pt.original_id);
-      // Para ex-inquilinos: não pagos = dívida total; pagos parciais = saldo devedor
-      const totalOwed = records.reduce((s, r) => !r.paid ? s + r.rent_value : s + calcOwed(r), 0);
+      const totalOwed = records.reduce((s, r) => s + calcOwed(r), 0);
       const totalReceived = records.reduce((s, r) => s + calcReceived(r), 0);
       return { ...pt, apt, condo, contract, records, totalOwed, totalReceived };
     });
@@ -100,49 +100,31 @@ export default function PreviousTenants() {
 
   async function handleSaveEdit() {
     if (!editModal) return;
-    const paidAmt = parseFloat(editModal.paidAmount) || 0;
+    const paidAmt = parseFloat(editModal.paidAmount);
     const debtAmt = parseFloat(editModal.debtAmount);
+    if (isNaN(paidAmt)) { toast.error('Valor inválido.'); return; }
 
-    // Remover campos de join que não são colunas de financial_records
-    const { apartments: _apt, ...cleanRecord } = editModal.record as FinancialRecordDB & { apartments?: unknown };
+    // Se debtAmount foi preenchido explicitamente, ajusta paid_amount para rent_value - debt
+    const effectivePaid = !isNaN(debtAmt)
+      ? Math.max(0, editModal.record.rent_value - debtAmt)
+      : paidAmt;
 
-    if (paidAmt > 0) {
-      // Registrando pagamento: paid=true, paid_amount=paidAmt
-      // Se "Devendo" foi preenchido, atualiza o rent_value para o valor proporcional
-      const newRentValue = !isNaN(debtAmt) && debtAmt > 0
-        ? paidAmt + debtAmt   // proporcional = pago + devendo
-        : editModal.record.rent_value;
-      await upsert.mutateAsync({
-        ...cleanRecord,
-        rent_value: newRentValue,
-        paid: true,
-        paid_amount: paidAmt,
-        payment_date: editModal.date,
-        payment_method: editModal.method,
-      });
-      toast.success('Pagamento registrado!');
-    } else {
-      // Apenas ajustando o valor do período (proporcional, sem pagamento ainda)
-      // "Devendo" aqui = o novo rent_value do período
-      const newRentValue = !isNaN(debtAmt) && debtAmt > 0
-        ? debtAmt
-        : editModal.record.rent_value;
-      await upsert.mutateAsync({
-        ...cleanRecord,
-        rent_value: newRentValue,
-        paid: false,
-        paid_amount: null,
-        payment_date: null,
-        payment_method: null,
-      });
-      toast.success('Valor do período atualizado!');
-    }
+    await upsert.mutateAsync({
+      ...editModal.record,
+      paid: true,
+      paid_amount: effectivePaid,
+      payment_date: editModal.date,
+      payment_method: editModal.method,
+    });
     setEditModal(null);
+    toast.success('Pagamento atualizado!');
   }
 
   async function handleDownloadReceipt(r: FinancialRecordDB, pt: typeof enriched[0]) {
     try {
       const allAptRecords = pt.records;
+      const isDebtNotice = !r.paid;
+      const totalOwed = pt.totalOwed;
       const pdfBytes = buildReceiptPDF({
         record: r,
         apartmentUnit: pt.apt?.unit_number ?? '',
@@ -157,18 +139,21 @@ export default function PreviousTenants() {
         contractCautionDate: pt.contract?.caution_date,
         allYearRecords: allAptRecords,
         adminName,
+        debtNotice: isDebtNotice,
+        totalOwed: isDebtNotice ? totalOwed : undefined,
       });
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
+      const prefix = isDebtNotice ? 'Aviso' : 'Recibo';
       const a = Object.assign(document.createElement('a'), {
         href: url,
-        download: `Recibo_${pt.apt?.unit_number ?? 'Apto'}_${pt.first_name}_${pt.last_name}_${r.month}.pdf`.replace(/\s+/g, '_'),
+        download: `${prefix}_${pt.apt?.unit_number ?? 'Apto'}_${pt.first_name}_${pt.last_name}_${r.month}.pdf`.replace(/\s+/g, '_'),
       });
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
-      toast.success('Recibo gerado!');
+      toast.success(isDebtNotice ? 'Aviso de cobrança gerado!' : 'Recibo gerado!');
     } catch (err: any) {
-      toast.error(`Erro ao gerar recibo: ${err.message}`);
+      toast.error(`Erro ao gerar: ${err.message}`);
     }
   }
 
@@ -260,7 +245,7 @@ export default function PreviousTenants() {
                         {hasDebt ? (
                           <Badge color="red">
                             <AlertCircle className="w-3 h-3" />
-                            {formatCurrency(pt.totalOwed)} em aberto
+                            Devendo {formatCurrency(pt.totalOwed)}
                           </Badge>
                         ) : (
                           <Badge color="green">
@@ -334,8 +319,7 @@ export default function PreviousTenants() {
                               {pt.records
                                 .sort((a, b) => a.month.localeCompare(b.month))
                                 .map(r => {
-                                  // Ex-inquilino: não pagos são dívidas (rent_value), pagos usam calcOwed
-                                  const owed = r.paid ? calcOwed(r) : r.rent_value;
+                                  const owed = calcOwed(r);
                                   const received = calcReceived(r);
                                   const { periodLabel } = getPeriodAndDueDate(
                                     r.month,
@@ -351,7 +335,7 @@ export default function PreviousTenants() {
                                       <td className="px-4 py-2.5 text-right">
                                         {r.paid
                                           ? <span style={{ color: 'hsl(var(--paid))' }}>{formatCurrency(received)}</span>
-                                          : <span className="text-muted-foreground text-xs italic">Não pago</span>}
+                                          : <span className="text-muted-foreground">—</span>}
                                       </td>
                                       <td className="px-4 py-2.5 text-right">
                                         {owed > 0
@@ -366,18 +350,17 @@ export default function PreviousTenants() {
                                           <button
                                             onClick={() => setEditModal({
                                               record: r,
-                                              // Não pago: começa com 0 para o usuário registrar quanto recebeu
-                                              paidAmount: r.paid ? String(r.paid_amount ?? r.rent_value) : '0',
+                                              paidAmount: String(r.paid_amount ?? r.rent_value),
                                               date: r.payment_date ?? new Date().toISOString().split('T')[0],
                                               method: (r.payment_method as PaymentMethod) ?? 'pix',
-                                              debtAmount: '',
+                                              debtAmount: owed > 0 ? String(owed) : '',
                                             })}
                                             className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
                                             title="Editar pagamento"
                                           >
                                             <Pencil className="w-3.5 h-3.5" />
                                           </button>
-                                          {r.paid && r.payment_date && (
+                                          {r.paid && (
                                             <button
                                               onClick={() => handleDownloadReceipt(r, pt)}
                                               className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-primary"
@@ -401,10 +384,8 @@ export default function PreviousTenants() {
                                 <td className="px-4 py-2 text-right font-bold text-sm" style={{ color: 'hsl(var(--paid))' }}>
                                   {formatCurrency(pt.totalReceived)}
                                 </td>
-                                <td className="px-4 py-2 text-right font-bold text-sm">
-                                  {pt.totalOwed > 0
-                                    ? <span className="text-destructive">{formatCurrency(pt.totalOwed)}</span>
-                                    : <span className="text-muted-foreground">—</span>}
+                                <td className="px-4 py-2 text-right font-bold text-sm text-destructive">
+                                  {pt.totalOwed > 0 ? formatCurrency(pt.totalOwed) : '—'}
                                 </td>
                                 <td colSpan={2} />
                               </tr>
@@ -427,42 +408,28 @@ export default function PreviousTenants() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Pencil className="w-5 h-5 text-primary" />
-              {editModal?.record.paid ? 'Editar Pagamento' : 'Registrar Pagamento'}
+              Editar Pagamento
             </DialogTitle>
           </DialogHeader>
           {editModal && (
             <div className="py-2 space-y-4">
               <div className="bg-muted/40 rounded-lg px-3 py-2 text-xs text-muted-foreground">
-                Aluguel original: <strong>{formatCurrency(editModal.record.rent_value)}</strong> ·
+                Contrato: <strong>{formatCurrency(editModal.record.rent_value)}</strong> ·
                 Mês: <strong>{editModal.record.month}</strong>
               </div>
-
-              {/* Valor devendo / proporcional */}
               <div>
-                <Label>
-                  {parseFloat(editModal.paidAmount) > 0
-                    ? 'Valor ainda devendo após pagamento'
-                    : 'Valor do período (proporcional)'}
-                </Label>
+                <Label>Valor Pago (R$)</Label>
                 <Input type="number" min="0" step="0.01" className="mt-1"
-                  placeholder={String(editModal.record.rent_value)}
+                  value={editModal.paidAmount}
+                  onChange={e => setEditModal(p => p ? { ...p, paidAmount: e.target.value, debtAmount: '' } : null)}
+                />
+              </div>
+              <div>
+                <Label>Valor Devendo <span className="text-muted-foreground font-normal">(ou deixe calcular automaticamente)</span></Label>
+                <Input type="number" min="0" step="0.01" className="mt-1"
+                  placeholder={String(Math.max(0, editModal.record.rent_value - parseFloat(editModal.paidAmount || '0')))}
                   value={editModal.debtAmount}
                   onChange={e => setEditModal(p => p ? { ...p, debtAmount: e.target.value } : null)}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  {parseFloat(editModal.paidAmount) > 0
-                    ? 'Se houver saldo devedor após o pagamento parcial.'
-                    : 'Deixe em branco para manter R$ ' + formatCurrency(editModal.record.rent_value) + '. Preencha com o valor proporcional se o período foi parcial.'}
-                </p>
-              </div>
-
-              {/* Valor pago */}
-              <div>
-                <Label>Valor Pago (R$) <span className="text-muted-foreground font-normal">(preencha se houve pagamento)</span></Label>
-                <Input type="number" min="0" step="0.01" className="mt-1"
-                  placeholder="0"
-                  value={editModal.paidAmount === '0' ? '' : editModal.paidAmount}
-                  onChange={e => setEditModal(p => p ? { ...p, paidAmount: e.target.value || '0' } : null)}
                 />
               </div>
               <div>
