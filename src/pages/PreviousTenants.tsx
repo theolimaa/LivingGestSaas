@@ -396,19 +396,19 @@ export default function PreviousTenants() {
                         </div>
                       )}
                     </div>
+                  )}
 
-                    {/* Acordos de dívida */}
-                    {isOpen && pt.totalOwed > 0 && (
-                      <div className="border-t border-border bg-muted/5 px-4 py-4">
-                        <DebtAgreementPanel
-                          previousTenantId={pt.id}
-                          apartmentId={pt.apartment_id}
-                          totalOwed={pt.totalOwed}
-                        />
-                      </div>
-                    )}
-                  </div>
-                )}
+                  {/* Acordos de dívida — fora do isOpen para ter seu próprio controle */}
+                  {isOpen && pt.totalOwed > 0 && (
+                    <div className="border-t border-border bg-muted/5 px-4 py-4">
+                      <DebtAgreementPanel
+                        previousTenantId={pt.id}
+                        apartmentId={pt.apartment_id}
+                        totalOwed={pt.totalOwed}
+                      />
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
