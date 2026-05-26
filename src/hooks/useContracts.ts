@@ -128,7 +128,14 @@ export function useCloseContract() {
       if (tenantErr) throw tenantErr;
       if (!tenant) throw new Error('Inquilino não encontrado');
 
-      // 2. Marcar contrato como encerrado (mantém na tabela para histórico)
+      // 2a. Buscar dados do contrato para cálculo proporcional
+      const { data: contractData } = await supabase
+        .from('contracts')
+        .select('payment_day, rent_value')
+        .eq('id', contractId)
+        .single();
+
+      // 2b. Marcar contrato como encerrado (mantém na tabela para histórico)
       const { error: contractErr } = await supabase
         .from('contracts')
         .update({ status: 'ended', end_date: endDate })
@@ -143,8 +150,52 @@ export function useCloseContract() {
         .delete()
         .eq('tenant_id', tenantId)
         .eq('paid', false)
-        .gte('month', endMonth); // inclui o próprio mês de encerramento se não pago
+        .gt('month', endMonth); // registros futuros apenas
       if (deleteRecordsErr) throw deleteRecordsErr;
+
+      // 3b. Para período parcial: atualizar o último registro com valor proporcional
+      //     Se não existir, criar um novo registro com o valor proporcional
+      const payDay = contractData?.payment_day ?? 1;
+      const endD = new Date(endDate + 'T12:00:00');
+      let pStart = new Date(endD.getFullYear(), endD.getMonth(), payDay);
+      if (pStart > endD) pStart = new Date(endD.getFullYear(), endD.getMonth() - 1, payDay);
+      const pEnd = new Date(pStart.getFullYear(), pStart.getMonth() + 1, payDay);
+      const periodDays = Math.round((pEnd.getTime() - pStart.getTime()) / 86400000);
+      const daysStayed = Math.round((endD.getTime() - pStart.getTime()) / 86400000) + 1;
+      const isPartial = daysStayed < periodDays;
+
+      if (isPartial && contractData?.rent_value) {
+        const proportional = Math.round((contractData.rent_value * daysStayed / periodDays) * 100) / 100;
+        // Tenta atualizar registro existente não pago do mês de encerramento
+        const { data: existingRec } = await supabase
+          .from('financial_records')
+          .select('id')
+          .eq('tenant_id', tenantId)
+          .eq('month', endMonth)
+          .eq('paid', false)
+          .maybeSingle();
+
+        if (existingRec) {
+          // Atualiza valor para proporcional
+          await supabase
+            .from('financial_records')
+            .update({ rent_value: proportional })
+            .eq('id', existingRec.id);
+        } else {
+          // Cria registro proporcional (período parcial não pago)
+          await supabase
+            .from('financial_records')
+            .insert({
+              apartment_id: apartmentId,
+              tenant_id: tenantId,
+              contract_id: contractId,
+              month: endMonth,
+              rent_value: proportional,
+              paid: false,
+              status: 'Pendente',
+            });
+        }
+      }
 
       // 4. Soft-delete do inquilino: apenas marca archived_at
       //    Os documentos, contrato e registros financeiros continuam linkados
