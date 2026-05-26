@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Building2, Home, TrendingUp, TrendingDown, DollarSign, Pencil, Trash2, ArrowUpDown, AlertTriangle, ChevronRight, History } from 'lucide-react';
+import { Plus, Building2, Home, TrendingUp, TrendingDown, DollarSign, Pencil, Trash2, ArrowUpDown, AlertTriangle, ChevronRight, History, Handshake } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -16,7 +16,7 @@ import { useApartments } from '@/hooks/useApartments';
 import { useAllFinancialRecords, FinancialRecordDB, calcReceived, calcOwed } from '@/hooks/useFinancial';
 import { useContracts } from '@/hooks/useContracts';
 import { useTenants, useAllPreviousTenants } from '@/hooks/useTenants';
-import { useAllDebtInstallments } from '@/hooks/useDebtAgreements';
+import { useAllDebtInstallments, useAllDebtAgreements } from '@/hooks/useDebtAgreements';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
  
 function getStatus(
@@ -198,6 +198,7 @@ export default function Dashboard() {
   const { data: allTenants = [] } = useTenants();
   const { data: previousTenants = [] } = useAllPreviousTenants();
   const { data: debtInstallments = [] } = useAllDebtInstallments();
+  const { data: allDebtAgreements = [] } = useAllDebtAgreements();
   const deleteCondo = useDeleteCondominium();
  
   const { selectedYear, selectedMonth } = state;
@@ -269,6 +270,64 @@ export default function Dashboard() {
     isFormer: previousTenantIds.has(r.tenant_id ?? ''),
   }));
   const totalOwed = debtRecords.reduce((s, r) => s + calcOwed(r), 0);
+
+  // Saldo restante de acordos de dívida ativos entra no Devendo
+  const agreementsOwed = allDebtAgreements
+    .filter(ag => ag.status === 'active')
+    .reduce((s, ag) => {
+      const paid = debtInstallments
+        .filter(i => i.agreement_id === ag.id && i.paid)
+        .reduce((sum, i) => sum + i.amount, 0);
+      return s + Math.max(0, ag.agreed_amount - paid);
+    }, 0);
+  const totalOwedAll = totalOwed + agreementsOwed;
+
+  // Parcelas não pagas de acordos — entram em "A Receber" com suas datas
+  const pendingInstallmentRows = debtInstallments
+    .filter(inst => {
+      if (inst.paid) return false;
+      if (!inst.due_date) return false;
+      const [y, m] = inst.due_date.split('-').map(Number);
+      if (selectedMonthKey) return inst.due_date.startsWith(selectedMonthKey);
+      return y === selectedYear;
+    })
+    .map(inst => {
+      const ag = allDebtAgreements.find(a => a.id === inst.agreement_id);
+      const pt = previousTenants.find(p => p.id === ag?.previous_tenant_id);
+      const apt = apartments.find(a => a.id === ag?.apartment_id);
+      const condo = condominiums.find(c => c.id === apt?.condominium_id);
+      // Create a shape compatible with DetailModal rows
+      return {
+        id: inst.id,
+        apartment_id: ag?.apartment_id ?? '',
+        tenant_id: pt?.original_id ?? '',
+        contract_id: null,
+        month: inst.due_date?.substring(0, 7) ?? '',
+        rent_value: inst.amount,
+        paid: false,
+        payment_date: null,
+        paid_amount: null,
+        payment_method: null,
+        debt_paid_amount: null,
+        debt_payment_date: null,
+        debt_payment_method: null,
+        status: 'Acordo',
+        observations: `Parcela ${inst.installment_number}/${ag?.installment_count ?? '?'} do acordo`,
+        receipt_number: null,
+        receipt_generated_at: null,
+        created_at: null,
+        updated_at: null,
+        computedStatus: 'pending',
+        isFormer: true,
+        // Extra for display
+        _tenantName: pt ? `${pt.first_name} ${pt.last_name}` : '—',
+        _condoName: condo?.name ?? '—',
+        _aptUnit: apt?.unit_number ?? '—',
+        _isDue: true,
+      } as any;
+    });
+
+  const totalPendingAll = totalPending + pendingInstallmentRows.reduce((s, r) => s + r.rent_value, 0);
 
   // Parcelas de acordos pagas no mês selecionado contam como receita
   const paidInstallmentsThisMonth = debtInstallments.filter(inst => {
@@ -354,7 +413,7 @@ export default function Dashboard() {
               </div>
             </div>
             <p className="text-xl md:text-2xl font-bold relative z-10" style={{ color: 'hsl(var(--warning))' }}>
-              {formatCurrency(totalPending)}
+              {formatCurrency(totalPendingAll)}
             </p>
             <p className="text-xs text-muted-foreground mt-1.5 relative z-10 flex items-center gap-1">
               Ver detalhes <ChevronRight className="w-3 h-3" />
@@ -393,14 +452,14 @@ export default function Dashboard() {
             </div>
             <p
               className="text-xl md:text-2xl font-bold relative z-10"
-              style={{ color: totalOwed > 0 ? 'hsl(var(--overdue))' : 'hsl(var(--paid))' }}
+              style={{ color: totalOwedAll > 0 ? 'hsl(var(--overdue))' : 'hsl(var(--paid))' }}
             >
-              {formatCurrency(totalOwed)}
+              {formatCurrency(totalOwedAll)}
             </p>
             {/* Breakdown atual vs anterior */}
-            {totalOwed > 0 && (() => {
+            {totalOwedAll > 0 && (() => {
               const formerOwed = debtRecords.filter(r => r.isFormer).reduce((s, r) => s + calcOwed(r), 0);
-              const currentOwed = totalOwed - formerOwed;
+              const currentOwed = totalOwedAll - formerOwed - agreementsOwed;
               return (
                 <div className="mt-1.5 relative z-10 space-y-0.5">
                   {currentOwed > 0 && (
@@ -411,6 +470,11 @@ export default function Dashboard() {
                   {formerOwed > 0 && (
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
                       <History className="w-3 h-3" /> Anteriores: {formatCurrency(formerOwed)}
+                    </p>
+                  )}
+                  {agreementsOwed > 0 && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Handshake className="w-3 h-3" /> Acordos: {formatCurrency(agreementsOwed)}
                     </p>
                   )}
                 </div>
@@ -684,7 +748,7 @@ export default function Dashboard() {
         </AlertDialogContent>
       </AlertDialog>
  
-      <DetailModal open={pendingModal} onClose={() => setPendingModal(false)} title={`A Receber — ${filterLabel} ${selectedYear}`} records={pendingRecords} tenants={allTenants} apartments={apartments} condominiums={condominiums} variant="pending" />
+      <DetailModal open={pendingModal} onClose={() => setPendingModal(false)} title={`A Receber — ${filterLabel} ${selectedYear}`} records={[...pendingRecords, ...pendingInstallmentRows]} tenants={[...allTenants, ...previousTenants.map(pt => ({ id: pt.original_id ?? '', first_name: pt.first_name, last_name: pt.last_name }))]} apartments={apartments} condominiums={condominiums} variant="pending" />
       <DetailModal open={overdueModal} onClose={() => setOverdueModal(false)} title={`Inadimplentes — ${filterLabel} ${selectedYear}`} records={overdueRecords} tenants={allTenants} apartments={apartments} condominiums={condominiums} variant="overdue" />
       <DetailModal open={receivedModal} onClose={() => setReceivedModal(false)} title={`Receita Recebida — ${filterLabel} ${selectedYear}`} records={receivedRecords} tenants={allTenants} apartments={apartments} condominiums={condominiums} variant="received" />
     </Layout>
