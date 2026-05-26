@@ -331,7 +331,6 @@ export default function PreviousTenants() {
                                 .sort((a, b) => a.month.localeCompare(b.month))
                                 .map(r => {
                                   // Ex-inquilino: não pagos = dívida do período, pagos = saldo calcOwed
-                                  // Se há acordo ativo, registros não pagos mostram — (gerenciado pelo acordo)
                                   const owed = r.paid ? calcOwed(r) : (pt.hasActiveAgreement ? 0 : r.rent_value);
                                   const received = calcReceived(r);
                                   const { periodLabel } = getPeriodAndDueDate(
