@@ -101,12 +101,23 @@ export function buildReceiptPDF(input: ReceiptPDFInput): Uint8Array {
   const paidFormatted = formatCurrency(receivedAmt > 0 ? receivedAmt : record.rent_value);
   const methodLabel = record.payment_method === 'pix' ? ' Forma de pagamento: Pix.' : record.payment_method === 'especie' ? ' Forma de pagamento: Espécie.' : '';
 
-  const title = `RECIBO — APTO ${apartmentUnit} — ${tenantFirstName} ${tenantLastName} — ${today}`;
-  let mainText = `Recebi de ${tenantFirstName} ${tenantLastName}, CPF ${
-    tenantCpf || '—'
-  } a importância de: ${paidFormatted} referente ao aluguel para o período de ${periodLabel}.`;
-  if (record.paid && methodLabel) mainText += methodLabel;
-  if (owedAmt > 0) mainText += ` Saldo devedor: ${formatCurrency(owedAmt)}.`;
+  const prefix = (debtNotice && !record.paid) ? 'AVISO DE COBRANÇA' : 'RECIBO';
+  const title = `${prefix} — APTO ${apartmentUnit} — ${tenantFirstName} ${tenantLastName} — ${today}`;
+  let mainText: string;
+  if (debtNotice && !record.paid) {
+    mainText = `Aviso de cobrança para ${tenantFirstName} ${tenantLastName}, CPF ${
+      tenantCpf || '—'
+    }. Referente ao aluguel do período ${periodLabel}, no valor de ${formatCurrency(record.rent_value)}, que consta em aberto.`;
+    if (totalOwed && totalOwed > record.rent_value) {
+      mainText += ` Total em débito: ${formatCurrency(totalOwed)}.`;
+    }
+  } else {
+    mainText = `Recebi de ${tenantFirstName} ${tenantLastName}, CPF ${
+      tenantCpf || '—'
+    } a importância de: ${paidFormatted} referente ao aluguel para o período de ${periodLabel}.`;
+    if (record.paid && methodLabel) mainText += methodLabel;
+    if (owedAmt > 0) mainText += ` Saldo devedor: ${formatCurrency(owedAmt)}.`;
+  }
   if (record.observations) mainText += ` Obs: ${record.observations}.`;
   const cautionLine =
     contractCautionPaid && contractCautionValue
