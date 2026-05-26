@@ -18,6 +18,7 @@ import {
 import { useAllPreviousTenants } from '@/hooks/useTenants';
 import { buildReceiptPDF } from '@/lib/generateReceiptPDF';
 import { DebtAgreementPanel } from '@/components/DebtAgreementPanel';
+import { useAllDebtAgreements } from '@/hooks/useDebtAgreements';
 import { useAuth } from '@/hooks/useAuth';
 import { useApartments } from '@/hooks/useApartments';
 import { useCondominiums } from '@/hooks/useCondominiums';
@@ -48,6 +49,7 @@ export default function PreviousTenants() {
   const { data: contracts = [] } = useContracts();
   const { data: financialRecords = [] } = useAllFinancialRecords();
   const upsert = useUpsertFinancialRecord();
+  const { data: allAgreements = [] } = useAllDebtAgreements();
   const { user } = useAuth();
   const adminName = user?.user_metadata?.username || user?.email?.split('@')[0] || 'Administrador';
 
