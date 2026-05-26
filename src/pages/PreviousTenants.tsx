@@ -397,19 +397,18 @@ export default function PreviousTenants() {
                       )}
                     </div>
 
-                  {/* Acordos de dívida — só aparece quando expandido e há dívida */}
-                  {isOpen && pt.totalOwed > 0 && (
-                    <div className="border-t border-border bg-muted/5 px-4 py-4">
-                      <DebtAgreementPanel
-                        previousTenantId={pt.id}
-                        apartmentId={pt.apartment_id}
-                        totalOwed={pt.totalOwed}
-                      />
-                    </div>
-                  )}
+                    {/* Acordos de dívida */}
+                    {isOpen && pt.totalOwed > 0 && (
+                      <div className="border-t border-border bg-muted/5 px-4 py-4">
+                        <DebtAgreementPanel
+                          previousTenantId={pt.id}
+                          apartmentId={pt.apartment_id}
+                          totalOwed={pt.totalOwed}
+                        />
+                      </div>
+                    )}
                   </div>
-                  )}
-                </div>
+                )}
               );
             })}
           </div>
