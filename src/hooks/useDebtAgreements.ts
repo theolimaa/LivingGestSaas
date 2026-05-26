@@ -263,3 +263,35 @@ export function useCancelDebtAgreement() {
     },
   });
 }
+
+export function useAllDebtAgreements() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ['debt_agreements_all'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('debt_agreements')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data as DebtAgreement[];
+    },
+    enabled: !!user,
+  });
+}
+
+export function useAllDebtInstallments() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ['debt_installments_all'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('debt_installments')
+        .select('*, debt_agreements(previous_tenant_id, apartment_id)')
+        .order('payment_date', { ascending: false });
+      if (error) throw error;
+      return data as (DebtInstallment & { debt_agreements: { previous_tenant_id: string; apartment_id: string } })[];
+    },
+    enabled: !!user,
+  });
+}
