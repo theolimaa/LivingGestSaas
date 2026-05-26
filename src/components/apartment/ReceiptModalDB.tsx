@@ -121,11 +121,18 @@ export default function ReceiptModalDB({
     const method = methodLabel(record.payment_method);
     const owed = calcOwed({ ...record, paid_amount: editablePaidAmounts[record.id] ?? record.paid_amount });
 
-    let mainStr = `Recebi de ${tenant.first_name} ${tenant.last_name}, CPF ${tenant.cpf || '—'} a importância de: ${paidFormatted} referente ao aluguel para o período de ${periodLabel}.`;
-    if (record.paid) mainStr += ` Forma de pagamento: ${method}.`;
-    if (owed > 0) mainStr += ` Saldo devedor: ${formatCurrency(owed)}.`;
+    let mainStr: string;
+    if (!record.paid) {
+      // Aviso de cobrança para registros não pagos
+      mainStr = `Aviso de cobrança para ${tenant.first_name} ${tenant.last_name}, CPF ${tenant.cpf || '—'}. Referente ao aluguel do período ${periodLabel}, no valor de ${rentFormatted}, que consta em aberto.`;
+    } else {
+      mainStr = `Recebi de ${tenant.first_name} ${tenant.last_name}, CPF ${tenant.cpf || '—'} a importância de: ${paidFormatted} referente ao aluguel para o período de ${periodLabel}.`;
+      if (record.paid) mainStr += ` Forma de pagamento: ${method}.`;
+      if (owed > 0) mainStr += ` Saldo devedor: ${formatCurrency(owed)}.`;
+    }
 
-    setTitle(`RECIBO — APTO ${apartment.unit_number} — ${tenant.first_name} ${tenant.last_name} — ${today}`);
+    const titlePrefix = record.paid ? 'RECIBO' : 'AVISO DE COBRANÇA';
+    setTitle(`${titlePrefix} — APTO ${apartment.unit_number} — ${tenant.first_name} ${tenant.last_name} — ${today}`);
     setMainText(mainStr);
     setCautionLine(cautionText);
     setObservationsLine(record.observations ?? '');
@@ -229,7 +236,7 @@ export default function ReceiptModalDB({
     const blob = new Blob([bytes], { type: 'application/pdf' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `Recibo-${receiptCode}.pdf`; a.click();
+    a.href = url; a.download = `${record.paid ? 'Recibo' : 'Aviso'}-${receiptCode}.pdf`; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   }
 
