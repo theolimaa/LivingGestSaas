@@ -41,6 +41,23 @@ export default function ContractTabDB({ tenantId, apartmentId, tenantName }: {
   const [editing, setEditing] = useState(false);
   const [showClose, setShowClose] = useState(false);
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Calcula aluguel proporcional ao encerrar contrato
+  function calcProportional(rentValue: number, paymentDay: number, endDateStr: string): {
+    days: number; periodDays: number; value: number; periodStart: string; periodEnd: string;
+  } {
+    const end = new Date(endDateStr + 'T12:00:00');
+    // Início do período: último dia de pagamento antes ou igual à data de encerramento
+    let pStart = new Date(end.getFullYear(), end.getMonth(), paymentDay);
+    if (pStart > end) pStart = new Date(end.getFullYear(), end.getMonth() - 1, paymentDay);
+    // Fim do período
+    const pEnd = new Date(pStart.getFullYear(), pStart.getMonth() + 1, paymentDay);
+    const periodDays = Math.round((pEnd.getTime() - pStart.getTime()) / 86400000);
+    const daysStayed = Math.round((end.getTime() - pStart.getTime()) / 86400000) + 1;
+    const value = Math.round((rentValue * daysStayed / periodDays) * 100) / 100;
+    const fmt = (d: Date) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+    return { days: daysStayed, periodDays, value, periodStart: fmt(pStart), periodEnd: fmt(pEnd) };
+  }
   const [form, setForm] = useState<Partial<ContractDB>>({});
 
   const [generatingPeriods, setGeneratingPeriods] = useState(false);
@@ -419,9 +436,30 @@ export default function ContractTabDB({ tenantId, apartmentId, tenantName }: {
               O inquilino <strong>{tenantName}</strong> será movido para "Inquilinos Anteriores". Você terá <strong>1 minuto</strong> para desfazer.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="px-4 pb-2">
-            <Label>Data de encerramento</Label>
-            <Input className="mt-1" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+          <div className="px-4 pb-2 space-y-3">
+            <div>
+              <Label>Data de encerramento</Label>
+              <Input className="mt-1" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+            </div>
+            {contract && endDate && (() => {
+              const pd = contract.payment_day ?? 1;
+              const prop = calcProportional(contract.rent_value, pd, endDate);
+              const isFullPeriod = prop.days >= prop.periodDays;
+              return !isFullPeriod ? (
+                <div className="rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 px-3 py-2 text-xs space-y-1">
+                  <p className="font-semibold text-amber-700 dark:text-amber-400">Período proporcional</p>
+                  <p className="text-amber-700 dark:text-amber-400">
+                    Período: {prop.periodStart} a {prop.periodEnd} ({prop.periodDays} dias)
+                  </p>
+                  <p className="text-amber-700 dark:text-amber-400">
+                    Morou: {prop.days} dias → Aluguel proporcional: <strong>{formatCurrency(prop.value)}</strong>
+                  </p>
+                  <p className="text-amber-600/70 dark:text-amber-500/70">
+                    O registro do último período será atualizado automaticamente para {formatCurrency(prop.value)}.
+                  </p>
+                </div>
+              ) : null;
+            })()}
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
