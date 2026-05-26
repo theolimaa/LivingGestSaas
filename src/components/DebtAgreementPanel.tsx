@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import {
   Handshake, Plus, ChevronDown, ChevronRight, CheckCircle2,
-  XCircle, Clock, Loader2, Pencil, Trash2, RotateCcw,
+  XCircle, Clock, Loader2, Pencil, Trash2, RotateCcw, FileText,
 } from 'lucide-react';
+import { buildDebtAgreementReceiptPDF, DebtAgreementReceiptParams } from '@/lib/generateReceiptPDF';
+import { useAuth } from '@/hooks/useAuth';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,11 +23,12 @@ import {
 type PaymentMethod = 'pix' | 'especie';
 
 function InstallmentRow({
-  inst, agreement, previousTenantId,
+  inst, agreement, previousTenantId, onReceiptClick,
 }: {
   inst: ReturnType<typeof useDebtInstallments>['data'] extends (infer T)[] | undefined ? T : never;
   agreement: DebtAgreement;
   previousTenantId: string;
+  onReceiptClick?: (installmentNumber: number) => void;
 }) {
   const payInst = usePayInstallment();
   const unpayInst = useUnpayInstallment();
@@ -70,6 +74,13 @@ function InstallmentRow({
         {inst.paid ? (
           <div className="flex items-center gap-1">
             <span className="text-xs text-green-600 dark:text-green-400 font-medium">Pago</span>
+            <button
+              onClick={() => onReceiptClick?.(inst.installment_number)}
+              className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-primary"
+              title="Baixar recibo da parcela"
+            >
+              <FileText className="w-3 h-3" />
+            </button>
             <button
               onClick={() => unpayInst.mutate({ installmentId: inst.id, agreementId: agreement.id, previousTenantId })}
               className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground"
@@ -127,18 +138,51 @@ function InstallmentRow({
 }
 
 function AgreementCard({
-  agreement, previousTenantId,
+  agreement, previousTenantId, tenantFirstName, tenantLastName, tenantCpf, apartmentUnit, condominiumName,
 }: {
   agreement: DebtAgreement;
   previousTenantId: string;
+  tenantFirstName: string;
+  tenantLastName: string;
+  tenantCpf: string | null;
+  apartmentUnit: string;
+  condominiumName: string;
 }) {
   const { data: installments = [] } = useDebtInstallments(agreement.id);
   const updateAgreement = useUpdateDebtAgreement();
   const cancelAgreement = useCancelDebtAgreement();
+  const { user } = useAuth();
+  const adminName = user?.user_metadata?.username || user?.email?.split('@')[0] || 'Administrador';
   const [expanded, setExpanded] = useState(true);
   const [editModal, setEditModal] = useState(false);
   const [editNotes, setEditNotes] = useState(agreement.notes ?? '');
   const [editAgreedAmount, setEditAgreedAmount] = useState(String(agreement.agreed_amount));
+
+  function downloadReceipt(highlightInstallment?: number) {
+    try {
+      const pdf = buildDebtAgreementReceiptPDF({
+        agreement,
+        installments,
+        tenantFirstName,
+        tenantLastName,
+        tenantCpf,
+        apartmentUnit,
+        condominiumName,
+        adminName,
+        highlightInstallment,
+      });
+      const blob = new Blob([pdf], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const prefix = highlightInstallment ? `Parcela${highlightInstallment}` : 'Acordo';
+      const a = Object.assign(document.createElement('a'), {
+        href: url,
+        download: `${prefix}_${apartmentUnit}_${tenantFirstName}_${tenantLastName}.pdf`.replace(/\s+/g, '_'),
+      });
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      toast.success(highlightInstallment ? `Recibo da parcela ${highlightInstallment} gerado!` : 'Documento do acordo gerado!');
+    } catch (e: any) { toast.error(`Erro: ${e.message}`); }
+  }
 
   const paidCount = installments.filter(i => i.paid).length;
   const paidAmount = installments.filter(i => i.paid).reduce((s, i) => s + i.amount, 0);
@@ -193,7 +237,8 @@ function AgreementCard({
           {/* Installments */}
           <div className="space-y-1.5">
             {installments.map(inst => (
-              <InstallmentRow key={inst.id} inst={inst} agreement={agreement} previousTenantId={previousTenantId} />
+              <InstallmentRow key={inst.id} inst={inst} agreement={agreement} previousTenantId={previousTenantId}
+                onReceiptClick={(num) => downloadReceipt(num)} />
             ))}
           </div>
 
@@ -256,9 +301,14 @@ interface DebtAgreementPanelProps {
   previousTenantId: string;
   apartmentId: string;
   totalOwed: number;
+  tenantFirstName?: string;
+  tenantLastName?: string;
+  tenantCpf?: string | null;
+  apartmentUnit?: string;
+  condominiumName?: string;
 }
 
-export function DebtAgreementPanel({ previousTenantId, apartmentId, totalOwed }: DebtAgreementPanelProps) {
+export function DebtAgreementPanel({ previousTenantId, apartmentId, totalOwed, tenantFirstName = '', tenantLastName = '', tenantCpf = null, apartmentUnit = '', condominiumName = '' }: DebtAgreementPanelProps) {
   const { data: agreements = [], isLoading } = useDebtAgreements(previousTenantId);
   const createAgreement = useCreateDebtAgreement();
 
@@ -320,7 +370,9 @@ export function DebtAgreementPanel({ previousTenantId, apartmentId, totalOwed }:
       ) : (
         <div className="space-y-2">
           {agreements.map(ag => (
-            <AgreementCard key={ag.id} agreement={ag} previousTenantId={previousTenantId} />
+            <AgreementCard key={ag.id} agreement={ag} previousTenantId={previousTenantId}
+              tenantFirstName={tenantFirstName} tenantLastName={tenantLastName}
+              tenantCpf={tenantCpf} apartmentUnit={apartmentUnit} condominiumName={condominiumName} />
           ))}
           {!hasActive && (
             <Button size="sm" variant="outline" className="w-full h-8 text-xs gap-1" onClick={() => {
