@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Search, History, Building2, Home, AlertCircle,
   CheckCircle2, ChevronDown, ChevronRight, Loader2,
-  Pencil, FileText, Download,
+  Pencil, FileText, Download, Handshake,
 } from 'lucide-react';
 import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
@@ -247,10 +247,17 @@ export default function PreviousTenants() {
                           {pt.first_name} {pt.last_name}
                         </p>
                         {hasDebt ? (
-                          <Badge color="red">
-                            <AlertCircle className="w-3 h-3" />
-                            Devendo {formatCurrency(pt.totalOwed)}
-                          </Badge>
+                          pt.hasActiveAgreement ? (
+                            <Badge color="gray">
+                              <Handshake className="w-3 h-3" />
+                              Acordo em andamento
+                            </Badge>
+                          ) : (
+                            <Badge color="red">
+                              <AlertCircle className="w-3 h-3" />
+                              Devendo {formatCurrency(pt.totalOwed)}
+                            </Badge>
+                          )
                         ) : (
                           <Badge color="green">
                             <CheckCircle2 className="w-3 h-3" />
@@ -324,7 +331,8 @@ export default function PreviousTenants() {
                                 .sort((a, b) => a.month.localeCompare(b.month))
                                 .map(r => {
                                   // Ex-inquilino: não pagos = dívida do período, pagos = saldo calcOwed
-                                  const owed = r.paid ? calcOwed(r) : r.rent_value;
+                                  // Se há acordo ativo, registros não pagos mostram — (gerenciado pelo acordo)
+                                  const owed = r.paid ? calcOwed(r) : (pt.hasActiveAgreement ? 0 : r.rent_value);
                                   const received = calcReceived(r);
                                   const { periodLabel } = getPeriodAndDueDate(
                                     r.month,
@@ -408,6 +416,11 @@ export default function PreviousTenants() {
                         previousTenantId={pt.id}
                         apartmentId={pt.apartment_id}
                         totalOwed={pt.totalOwed}
+                        tenantFirstName={pt.first_name}
+                        tenantLastName={pt.last_name}
+                        tenantCpf={pt.cpf}
+                        apartmentUnit={pt.apt?.unit_number ?? ''}
+                        condominiumName={pt.condo?.name ?? ''}
                       />
                     </div>
                   )}
