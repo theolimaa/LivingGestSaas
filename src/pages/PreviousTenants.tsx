@@ -73,7 +73,8 @@ export default function PreviousTenants() {
       const contract = contracts.find(c => c.tenant_id === pt.original_id);
       // Registros financeiros vinculados ao tenant original
       const records = financialRecords.filter(r => r.tenant_id === pt.original_id);
-      const totalOwed = records.reduce((s, r) => s + calcOwed(r), 0);
+      // Ex-inquilino: registros não pagos = dívida total; pagos parciais = saldo devedor
+      const totalOwed = records.reduce((s, r) => !r.paid ? s + r.rent_value : s + calcOwed(r), 0);
       const totalReceived = records.reduce((s, r) => s + calcReceived(r), 0);
       return { ...pt, apt, condo, contract, records, totalOwed, totalReceived };
     });
@@ -319,7 +320,8 @@ export default function PreviousTenants() {
                               {pt.records
                                 .sort((a, b) => a.month.localeCompare(b.month))
                                 .map(r => {
-                                  const owed = calcOwed(r);
+                                  // Ex-inquilino: não pagos = dívida do período, pagos = saldo calcOwed
+                                  const owed = r.paid ? calcOwed(r) : r.rent_value;
                                   const received = calcReceived(r);
                                   const { periodLabel } = getPeriodAndDueDate(
                                     r.month,
@@ -394,6 +396,18 @@ export default function PreviousTenants() {
                         </div>
                       )}
                     </div>
+
+                  {/* Acordos de dívida — só aparece quando expandido e há dívida */}
+                  {isOpen && pt.totalOwed > 0 && (
+                    <div className="border-t border-border bg-muted/5 px-4 py-4">
+                      <DebtAgreementPanel
+                        previousTenantId={pt.id}
+                        apartmentId={pt.apartment_id}
+                        totalOwed={pt.totalOwed}
+                      />
+                    </div>
+                  )}
+                  </div>
                   )}
                 </div>
               );
