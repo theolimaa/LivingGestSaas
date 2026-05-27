@@ -102,8 +102,15 @@ function DetailModal({ open, onClose, title, records, tenants, apartments, condo
     const condo = apt ? condominiums.find(c => c.id === apt.condominium_id) : null;
     const contract = contracts.find(ct => ct.id === r.contract_id);
     let dateCol: string;
-    if (variant === 'received' || variant === 'debt') {
+    if (variant === 'received') {
       dateCol = r.payment_date ?? '-';
+    } else if (variant === 'debt') {
+      // Para parcelas de acordo: mostrar due_date como vencimento; para outros: data pagamento
+      if ((r as any).status === 'Acordo' && r.payment_date) {
+        dateCol = formatDate(r.payment_date);
+      } else {
+        dateCol = r.payment_date ?? '-';
+      }
     } else {
       const { dueDateLabel } = getPeriodAndDueDate(r.month, contract?.start_date ?? null, contract?.payment_day ?? 1, contract?.desired_payment_day, contract?.desired_payment_date);
       dateCol = dueDateLabel;
@@ -298,6 +305,47 @@ export default function Dashboard() {
       return s + Math.max(0, ag.agreed_amount - paid);
     }, 0);
   const totalOwedAll = totalOwed + agreementsOwed + formerUnpaidOwed;
+
+  // Linhas para o modal "Devendo" — inclui registros não pagos de ex-inquilinos e parcelas de acordo
+  const debtModalExtraRows = [
+    // Ex-inquilinos SEM acordo ativo com registros não pagos
+    ...enrichedRecords
+      .filter(r => {
+        if (r.paid) return false;
+        if (!previousTenantIds.has(r.tenant_id ?? '')) return false;
+        if (activeAgreementTenantIds.has(r.tenant_id ?? '')) return false;
+        if (selectedMonthKey) return (r.month ?? '') >= selectedMonthKey.substring(0,7);
+        return r.rent_value > 0;
+      })
+      .map(r => ({ ...r, isFormer: true, computedStatus: 'overdue' })),
+    // Parcelas de acordo em aberto (todas as não pagas do acordo ativo)
+    ...debtInstallments
+      .filter(inst => {
+        if (inst.paid) return false;
+        const ag = allDebtAgreements.find(a => a.id === inst.agreement_id);
+        return ag?.status === 'active';
+      })
+      .map(inst => {
+        const ag = allDebtAgreements.find(a => a.id === inst.agreement_id);
+        const pt = previousTenants.find(p => p.id === ag?.previous_tenant_id);
+        const apt = apartments.find(a => a.id === ag?.apartment_id);
+        return {
+          id: inst.id,
+          apartment_id: ag?.apartment_id ?? '',
+          tenant_id: pt?.original_id ?? '',
+          contract_id: null,
+          month: inst.due_date?.substring(0, 7) ?? '',
+          rent_value: inst.amount,
+          paid: false,
+          payment_date: inst.due_date,
+          paid_amount: null, payment_method: null, debt_paid_amount: null,
+          debt_payment_date: null, debt_payment_method: null,
+          status: 'Acordo', observations: `Parcela ${inst.installment_number}/${ag?.installment_count ?? '?'}`,
+          receipt_number: null, receipt_generated_at: null, created_at: null, updated_at: null,
+          computedStatus: 'pending', isFormer: true,
+        } as any;
+      }),
+  ];
 
   // Parcelas não pagas de acordos — entram em "A Receber" com suas datas
   const pendingInstallmentRows = debtInstallments
@@ -735,8 +783,8 @@ export default function Dashboard() {
         open={debtModal}
         onClose={() => setDebtModal(false)}
         title={`Devendo — ${filterLabel} ${selectedYear}`}
-        records={debtRecords}
-        tenants={allTenants}
+        records={[...debtRecords, ...debtModalExtraRows]}
+        tenants={[...allTenants, ...previousTenants.map(pt => ({ id: pt.original_id ?? '', first_name: pt.first_name, last_name: pt.last_name }))]}
         apartments={apartments}
         condominiums={condominiums}
         variant="debt"
