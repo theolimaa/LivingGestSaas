@@ -342,6 +342,7 @@ export default function PreviousTenants() {
                                   );
                                   // Para o último período de contrato encerrado: substituir fim do período pela data real de saída
                                   let periodLabel = basePeriodLabel;
+                                  if (r.month === '2026-05') console.log('DEBUG period fix:', { contractEndDate: contract?.end_date, rMonth: r.month, match: contract?.end_date?.substring(0,7) === r.month, basePeriodLabel });
                                   if (contract?.end_date && r.month === contract.end_date.substring(0, 7)) {
                                     const ed = new Date(contract.end_date + 'T12:00:00');
                                     const edStr = `${String(ed.getDate()).padStart(2,'0')}/${String(ed.getMonth()+1).padStart(2,'0')}/${ed.getFullYear()}`;
