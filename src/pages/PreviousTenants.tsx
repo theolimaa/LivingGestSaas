@@ -22,7 +22,7 @@ import { useAllDebtAgreements } from '@/hooks/useDebtAgreements';
 import { useAuth } from '@/hooks/useAuth';
 import { useApartments } from '@/hooks/useApartments';
 import { useCondominiums } from '@/hooks/useCondominiums';
-import { useContracts } from '@/hooks/useContracts';
+import { useContracts, useUpsertContract } from '@/hooks/useContracts';
 import { useAllFinancialRecords, useUpsertFinancialRecord, calcOwed, calcReceived, FinancialRecordDB } from '@/hooks/useFinancial';
 import { formatCurrency, formatDate, getPeriodAndDueDate } from '@/lib/utils-app';
 import { toast } from 'sonner';
@@ -49,8 +49,38 @@ export default function PreviousTenants() {
   const { data: contracts = [] } = useContracts();
   const { data: financialRecords = [] } = useAllFinancialRecords();
   const upsert = useUpsertFinancialRecord();
+  const upsertContract = useUpsertContract();
   const { data: allAgreements = [] } = useAllDebtAgreements();
   const { user } = useAuth();
+
+  // Modal edição de contrato
+  const [editContractModal, setEditContractModal] = useState<{
+    pt: typeof enriched[0];
+    endDate: string;
+    rentValue: string;
+  } | null>(null);
+
+  async function handleSaveContract() {
+    if (!editContractModal?.pt.contract) return;
+    const c = editContractModal.pt.contract;
+    await upsertContract.mutateAsync({
+      id: c.id,
+      tenant_id: c.tenant_id,
+      start_date: c.start_date,
+      end_date: editContractModal.endDate || null,
+      payment_day: c.payment_day,
+      desired_payment_day: c.desired_payment_day,
+      desired_payment_date: c.desired_payment_date,
+      rent_value: parseFloat(editContractModal.rentValue) || c.rent_value,
+      observations: c.observations,
+      status: c.status,
+      caution_paid: c.caution_paid ?? null,
+      caution_value: c.caution_value ?? null,
+      caution_date: c.caution_date ?? null,
+    });
+    setEditContractModal(null);
+    toast.success('Contrato atualizado!');
+  }
   const adminName = user?.user_metadata?.username || user?.email?.split('@')[0] || 'Administrador';
 
   const [search, setSearch] = useState('');
@@ -288,7 +318,16 @@ export default function PreviousTenants() {
                           <span>Saiu em {formatDate(pt.archived_at.split('T')[0])}</span>
                         )}
                         {contract?.end_date && (
-                          <span>Contrato até {formatDate(contract.end_date)}</span>
+                          <span className="flex items-center gap-1">
+                            Contrato até {formatDate(contract.end_date)}
+                            <button
+                              onClick={e => { e.stopPropagation(); setEditContractModal({ pt, endDate: contract.end_date ?? '', rentValue: String(contract.rent_value) }); }}
+                              className="p-0.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-primary"
+                              title="Editar contrato"
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                          </span>
                         )}
                       </div>
                     </div>
@@ -446,6 +485,47 @@ export default function PreviousTenants() {
           </div>
         )}
       </div>
+
+      {/* Modal edição de contrato */}
+      <Dialog open={!!editContractModal} onOpenChange={() => setEditContractModal(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="w-5 h-5 text-primary" />
+              Editar Contrato
+            </DialogTitle>
+          </DialogHeader>
+          {editContractModal && (
+            <div className="space-y-4 py-2">
+              <div className="bg-muted/40 rounded-lg px-3 py-2 text-xs text-muted-foreground">
+                Inquilino: <strong>{editContractModal.pt.first_name} {editContractModal.pt.last_name}</strong>
+                {' · '}Início: <strong>{formatDate(editContractModal.pt.contract?.start_date ?? '')}</strong>
+              </div>
+              <div>
+                <Label>Data de encerramento</Label>
+                <Input type="date" className="mt-1"
+                  value={editContractModal.endDate}
+                  onChange={e => setEditContractModal(p => p ? { ...p, endDate: e.target.value } : null)}
+                />
+              </div>
+              <div>
+                <Label>Valor do aluguel (R$)</Label>
+                <Input type="number" step="0.01" className="mt-1"
+                  value={editContractModal.rentValue}
+                  onChange={e => setEditContractModal(p => p ? { ...p, rentValue: e.target.value } : null)}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditContractModal(null)}>Cancelar</Button>
+            <Button onClick={handleSaveContract} disabled={upsertContract.isPending}>
+              {upsertContract.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal edição de pagamento */}
       <Dialog open={!!editModal} onOpenChange={() => setEditModal(null)}>
