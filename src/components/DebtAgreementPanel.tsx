@@ -319,6 +319,7 @@ interface DebtAgreementPanelProps {
 export function DebtAgreementPanel({ previousTenantId, apartmentId, totalOwed, tenantFirstName = '', tenantLastName = '', tenantCpf = null, apartmentUnit = '', condominiumName = '' }: DebtAgreementPanelProps) {
   const { data: agreements = [], isLoading } = useDebtAgreements(previousTenantId);
   const createAgreement = useCreateDebtAgreement();
+  const updateAgreementPanel = useUpdateDebtAgreement();
 
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({
@@ -337,19 +338,20 @@ export function DebtAgreementPanel({ previousTenantId, apartmentId, totalOwed, t
     const agreed = parseFloat(form.agreedAmount);
     const count = agreed === 0 ? 0 : parseInt(form.installmentCount);
     if (!orig || isNaN(agreed)) { return; }
-    // Dívida perdoada: cria acordo quitado sem parcelas
+    // Dívida perdoada: cria acordo com 1 parcela simbólica e imediatamente quita
     if (agreed === 0) {
-      await createAgreement.mutateAsync({
+      const ag = await createAgreement.mutateAsync({
         previousTenantId,
         apartmentId,
         originalAmount: orig,
         agreedAmount: 0,
-        installmentCount: 0,
+        installmentCount: 1,
         installmentValue: 0,
         notes: form.notes || 'Dívida perdoada',
         startDate: form.startDate,
-        forgivenDirect: true,
       });
+      // Marca como quitado imediatamente
+      await updateAgreementPanel.mutateAsync({ id: ag.id, previousTenantId, status: 'settled' });
       setShowCreate(false);
       return;
     }
