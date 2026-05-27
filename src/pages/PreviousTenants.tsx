@@ -342,12 +342,21 @@ export default function PreviousTenants() {
                                   );
                                   // Para o último período de contrato encerrado: substituir fim do período pela data real de saída
                                   let periodLabel = basePeriodLabel;
-                                  if (r.month === '2026-05') console.log('DEBUG period fix:', { contractEndDate: contract?.end_date, rMonth: r.month, match: contract?.end_date?.substring(0,7) === r.month, basePeriodLabel });
-                                  if (contract?.end_date && r.month === contract.end_date.substring(0, 7)) {
-                                    const ed = new Date(contract.end_date + 'T12:00:00');
-                                    const edStr = `${String(ed.getDate()).padStart(2,'0')}/${String(ed.getMonth()+1).padStart(2,'0')}/${ed.getFullYear()}`;
-                                    const parts = basePeriodLabel.split(' a ');
-                                    if (parts.length === 2) periodLabel = `${parts[0]} a ${edStr}`;
+                                  // r.month é o mês de INÍCIO do período (ex: 2026-04 para 25/04→25/05)
+                                  // O encerramento pode cair no mês SEGUINTE — precisamos comparar com o mês FIM do período
+                                  if (contract?.end_date) {
+                                    const [py, pm] = r.month.split('-').map(Number);
+                                    const endM = pm === 12 ? 1 : pm + 1;
+                                    const endY = pm === 12 ? py + 1 : py;
+                                    const periodEndMonth = `${endY}-${String(endM).padStart(2,'0')}`;
+                                    const contractEndMonth = contract.end_date.substring(0, 7);
+                                    // Aplica se o contrato encerrou durante este período (início ou fim do mês do período)
+                                    if (periodEndMonth === contractEndMonth || r.month === contractEndMonth) {
+                                      const ed = new Date(contract.end_date + 'T12:00:00');
+                                      const edStr = `${String(ed.getDate()).padStart(2,'0')}/${String(ed.getMonth()+1).padStart(2,'0')}/${ed.getFullYear()}`;
+                                      const parts = basePeriodLabel.split(' a ');
+                                      if (parts.length === 2) periodLabel = `${parts[0]} a ${edStr}`;
+                                    }
                                   }
                                   return (
                                     <tr key={r.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20">
@@ -381,15 +390,13 @@ export default function PreviousTenants() {
                                           >
                                             <Pencil className="w-3.5 h-3.5" />
                                           </button>
-                                          {r.paid && (
-                                            <button
+                                          <button
                                               onClick={() => handleDownloadReceipt(r, pt)}
                                               className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-primary"
-                                              title="Baixar recibo"
+                                              title={r.paid ? "Baixar recibo" : "Gerar aviso de cobrança"}
                                             >
                                               <FileText className="w-3.5 h-3.5" />
                                             </button>
-                                          )}
                                         </div>
                                       </td>
                                     </tr>
