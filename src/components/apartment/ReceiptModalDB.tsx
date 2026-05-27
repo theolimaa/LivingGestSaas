@@ -211,10 +211,12 @@ export default function ReceiptModalDB({
     y += 5;
 
     let totalPaid = 0, totalOwed = 0;
+    console.log('buildPDF: yearRecords count:', yearRecords.length, 'records:', yearRecords.map(r => ({ id: r.id, month: r.month, paid: r.paid, rent_value: r.rent_value })));
     doc.setFont('helvetica', 'normal');
     yearRecords.forEach(r => {
       const paid = getRowPaid(r);
       const owed = getRowOwed(r);
+      console.log('buildPDF row:', r.month, 'paid:', r.paid, 'getRowOwed:', owed);
       totalPaid += paid;
       totalOwed += owed;
       doc.text(getPeriodLabel(r.month), cols.periodo, y);
