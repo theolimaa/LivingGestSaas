@@ -85,8 +85,10 @@ export function useCreateDebtAgreement() {
       installmentValue: number;
       notes: string;
       startDate: string; // YYYY-MM-DD — data da primeira parcela
+      forgivenDirect?: boolean; // true = dívida perdoada, cria já como settled
     }) => {
       // 1. Criar o acordo
+      const status = forgivenDirect ? 'settled' : 'active';
       const { data: agreement, error: agErr } = await supabase
         .from('debt_agreements')
         .insert({
@@ -97,29 +99,30 @@ export function useCreateDebtAgreement() {
           installment_count: installmentCount,
           installment_value: installmentValue,
           notes: notes || null,
-          status: 'active',
+          status,
         })
         .select()
         .single();
       if (agErr) throw agErr;
 
-      // 2. Gerar parcelas
-      const installments = Array.from({ length: installmentCount }, (_, i) => {
-        const due = new Date(startDate + 'T12:00:00');
-        due.setMonth(due.getMonth() + i);
-        return {
-          agreement_id: agreement.id,
-          installment_number: i + 1,
-          amount: installmentValue,
-          due_date: due.toISOString().split('T')[0],
-          paid: false,
-        };
-      });
-
-      const { error: instErr } = await supabase
-        .from('debt_installments')
-        .insert(installments);
-      if (instErr) throw instErr;
+      // 2. Gerar parcelas (só se não for perdão direto)
+      if (!forgivenDirect && installmentCount > 0) {
+        const installments = Array.from({ length: installmentCount }, (_, i) => {
+          const due = new Date(startDate + 'T12:00:00');
+          due.setMonth(due.getMonth() + i);
+          return {
+            agreement_id: agreement.id,
+            installment_number: i + 1,
+            amount: installmentValue,
+            due_date: due.toISOString().split('T')[0],
+            paid: false,
+          };
+        });
+        const { error: instErr } = await supabase
+          .from('debt_installments')
+          .insert(installments);
+        if (instErr) throw instErr;
+      }
 
       return agreement as DebtAgreement;
     },
