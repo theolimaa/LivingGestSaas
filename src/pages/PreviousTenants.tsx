@@ -106,8 +106,13 @@ export default function PreviousTenants() {
       // Registros financeiros vinculados ao tenant original
       const records = financialRecords.filter(r => r.tenant_id === pt.original_id);
       const hasActiveAgreement = allAgreements.some(a => a.previous_tenant_id === pt.id && a.status === 'active');
+      // Dívida quitada ou cancelada via acordo = R$0 (perdoada ou encerrada)
+      const hasSettledAgreement = allAgreements.some(a => a.previous_tenant_id === pt.id && (a.status === 'settled' || a.status === 'cancelled'));
       // Ex-inquilino: registros não pagos = dívida total; pagos parciais = saldo devedor
-      const totalOwed = records.reduce((s, r) => !r.paid ? s + r.rent_value : s + calcOwed(r), 0);
+      // Se há acordo quitado/cancelado = dívida considerada zerada
+      const totalOwed = (hasActiveAgreement || hasSettledAgreement)
+        ? records.reduce((s, r) => s + calcOwed(r), 0) // só conta saldos de pagamentos parciais
+        : records.reduce((s, r) => !r.paid ? s + r.rent_value : s + calcOwed(r), 0);
       const totalReceived = records.reduce((s, r) => s + calcReceived(r), 0);
       return { ...pt, apt, condo, contract, records, totalOwed, totalReceived, hasActiveAgreement };
     });
