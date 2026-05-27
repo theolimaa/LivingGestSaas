@@ -108,13 +108,14 @@ export default function PreviousTenants() {
       const hasActiveAgreement = allAgreements.some(a => a.previous_tenant_id === pt.id && a.status === 'active');
       // Dívida quitada ou cancelada via acordo = R$0 (perdoada ou encerrada)
       const hasSettledAgreement = allAgreements.some(a => a.previous_tenant_id === pt.id && (a.status === 'settled' || a.status === 'cancelled'));
+      const hasAnyAgreement = allAgreements.some(a => a.previous_tenant_id === pt.id);
       // Ex-inquilino: registros não pagos = dívida total; pagos parciais = saldo devedor
       // Se há acordo quitado/cancelado = dívida considerada zerada
       const totalOwed = (hasActiveAgreement || hasSettledAgreement)
         ? records.reduce((s, r) => s + calcOwed(r), 0) // só conta saldos de pagamentos parciais
         : records.reduce((s, r) => !r.paid ? s + r.rent_value : s + calcOwed(r), 0);
       const totalReceived = records.reduce((s, r) => s + calcReceived(r), 0);
-      return { ...pt, apt, condo, contract, records, totalOwed, totalReceived, hasActiveAgreement };
+      return { ...pt, apt, condo, contract, records, totalOwed, totalReceived, hasActiveAgreement, hasAnyAgreement };
     });
   }, [previousTenants, apartments, condominiums, contracts, financialRecords, allAgreements]);
 
@@ -470,7 +471,7 @@ export default function PreviousTenants() {
                   )}
 
                   {/* Acordos de dívida — fora do isOpen para ter seu próprio controle */}
-                  {isOpen && pt.totalOwed > 0 && (
+                  {isOpen && (pt.totalOwed > 0 || pt.hasAnyAgreement) && (
                     <div className="border-t border-border bg-muted/5 px-4 py-4">
                       <DebtAgreementPanel
                         previousTenantId={pt.id}
