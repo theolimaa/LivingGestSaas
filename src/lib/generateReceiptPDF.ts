@@ -19,6 +19,7 @@ export interface ReceiptPDFInput {
   today?: string;
   debtNotice?: boolean;
   totalOwed?: number;
+  contractEndDate?: string | null; // para ajustar o último período ao dia real de saída
 }
 
 export function generateReceiptCode(
@@ -73,6 +74,7 @@ export function buildReceiptPDF(input: ReceiptPDFInput): Uint8Array {
     adminName,
     debtNotice = false,
     totalOwed: totalOwedParam,
+    contractEndDate,
   } = input;
 
   const paymentDay = contractPaymentDay ?? 1;
@@ -99,7 +101,24 @@ export function buildReceiptPDF(input: ReceiptPDFInput): Uint8Array {
     .sort((a, b) => a.month.localeCompare(b.month))
     .slice(0, 12);
 
-  const { periodLabel } = getPeriodAndDueDate(record.month, contractStartDate ?? null, paymentDay);
+  const { periodLabel: rawPeriodLabel } = getPeriodAndDueDate(record.month, contractStartDate ?? null, paymentDay);
+  // Ajusta o último período de contrato encerrado: substitui fim pelo dia real de saída
+  function applyEndDate(label: string, month: string): string {
+    if (!contractEndDate) return label;
+    const [py, pm] = month.split('-').map(Number);
+    const endM = pm === 12 ? 1 : pm + 1;
+    const endY = pm === 12 ? py + 1 : py;
+    const periodEndMonth = `${endY}-${String(endM).padStart(2,'0')}`;
+    const contractEndMonth = contractEndDate.substring(0, 7);
+    if (periodEndMonth === contractEndMonth || month === contractEndMonth) {
+      const ed = new Date(contractEndDate + 'T12:00:00');
+      const edStr = `${String(ed.getDate()).padStart(2,'0')}/${String(ed.getMonth()+1).padStart(2,'0')}/${ed.getFullYear()}`;
+      const parts = label.split(' a ');
+      if (parts.length === 2) return `${parts[0]} a ${edStr}`;
+    }
+    return label;
+  }
+  const periodLabel = applyEndDate(rawPeriodLabel, record.month);
   const receivedAmt = calcReceived(record);
   const owedAmt = calcOwed(record);
   const paidFormatted = formatCurrency(receivedAmt > 0 ? receivedAmt : record.rent_value);
@@ -188,9 +207,10 @@ export function buildReceiptPDF(input: ReceiptPDFInput): Uint8Array {
   let totalOwed = 0;
   doc.setFont('helvetica', 'normal');
   yearRecords.forEach(r => {
-    const { periodLabel: pLabel } = getPeriodAndDueDate(r.month, contractStartDate ?? null, paymentDay);
+    const { periodLabel: rawPLabel } = getPeriodAndDueDate(r.month, contractStartDate ?? null, paymentDay);
+    const pLabel = applyEndDate(rawPLabel, r.month);
     const received = calcReceived(r);
-    const owed = calcOwed(r);
+    const owed = r.paid ? calcOwed(r) : r.rent_value; // não pagos = devendo o valor todo
     totalPaid += received;
     totalOwed += owed;
     const methodStr = r.payment_method === 'pix' ? 'Pix' : r.payment_method === 'especie' ? 'Espécie' : '—';
