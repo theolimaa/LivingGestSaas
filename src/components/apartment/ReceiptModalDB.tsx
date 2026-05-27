@@ -110,6 +110,7 @@ export default function ReceiptModalDB({
       contract?.desired_payment_date,
     );
     // Para o último período de contrato encerrado: substituir fim pelo end_date real
+    // r.month é o mês de INÍCIO do período — o fim pode ser no mês seguinte
     if (contract?.end_date) {
       const [py, pm] = month.split('-').map(Number);
       const endM = pm === 12 ? 1 : pm + 1;
@@ -135,9 +136,7 @@ export default function ReceiptModalDB({
     const method = methodLabel(record.payment_method);
     const owed = calcOwed({ ...record, paid_amount: editablePaidAmounts[record.id] ?? record.paid_amount });
 
-    // Total em aberto de todos os registros não pagos do ano
     const totalUnpaid = yearRecords.reduce((s, r) => s + (r.paid ? 0 : (editableValues[r.id] ?? r.rent_value)), 0);
-
     let mainStr: string;
     if (!record.paid) {
       // Aviso de cobrança para registros não pagos
@@ -169,7 +168,8 @@ export default function ReceiptModalDB({
   }
   function getRowOwed(r: FinancialRecordDB) {
     const val = editableValues[r.id] ?? r.rent_value;
-    if (!r.paid) return val; // não pago = deve o valor inteiro
+    if (!r.paid) return val;
+    // Acordo fechado: proprietário aceitou valor parcial como quitação — sem dívida
     if (r.debt_payment_method === 'acordo') return 0;
     const paidAmt = editablePaidAmounts[r.id] ?? r.paid_amount ?? r.rent_value;
     const debtPaid = r.debt_paid_amount ?? 0;
