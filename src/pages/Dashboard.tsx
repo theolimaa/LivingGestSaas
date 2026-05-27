@@ -271,6 +271,23 @@ export default function Dashboard() {
   }));
   const totalOwed = debtRecords.reduce((s, r) => s + calcOwed(r), 0);
 
+  // Registros NÃO PAGOS de ex-inquilinos SEM acordo ativo também entram no Devendo
+  // (não duplica: quem tem acordo ativo usa agreementsOwed, não este)
+  const activeAgreementTenantIds = new Set(
+    allDebtAgreements
+      .filter(ag => ag.status === 'active')
+      .map(ag => previousTenants.find(pt => pt.id === ag.previous_tenant_id)?.original_id)
+      .filter(Boolean)
+  );
+  const formerUnpaidOwed = enrichedRecords
+    .filter(r => {
+      if (r.paid) return false;
+      if (!previousTenantIds.has(r.tenant_id ?? '')) return false;
+      if (activeAgreementTenantIds.has(r.tenant_id ?? '')) return false; // skip: has agreement
+      return r.rent_value > 0;
+    })
+    .reduce((s, r) => s + r.rent_value, 0);
+
   // Saldo restante de acordos de dívida ativos entra no Devendo
   const agreementsOwed = allDebtAgreements
     .filter(ag => ag.status === 'active')
@@ -280,7 +297,7 @@ export default function Dashboard() {
         .reduce((sum, i) => sum + i.amount, 0);
       return s + Math.max(0, ag.agreed_amount - paid);
     }, 0);
-  const totalOwedAll = totalOwed + agreementsOwed;
+  const totalOwedAll = totalOwed + agreementsOwed + formerUnpaidOwed;
 
   // Parcelas não pagas de acordos — entram em "A Receber" com suas datas
   const pendingInstallmentRows = debtInstallments
@@ -458,7 +475,7 @@ export default function Dashboard() {
             </p>
             {/* Breakdown atual vs anterior */}
             {totalOwedAll > 0 && (() => {
-              const formerOwed = debtRecords.filter(r => r.isFormer).reduce((s, r) => s + calcOwed(r), 0);
+              const formerOwed = debtRecords.filter(r => r.isFormer).reduce((s, r) => s + calcOwed(r), 0) + formerUnpaidOwed;
               const currentOwed = totalOwedAll - formerOwed - agreementsOwed;
               return (
                 <div className="mt-1.5 relative z-10 space-y-0.5">
