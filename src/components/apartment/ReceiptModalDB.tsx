@@ -109,6 +109,20 @@ export default function ReceiptModalDB({
       contract?.desired_payment_day,
       contract?.desired_payment_date,
     );
+    // Para o último período de contrato encerrado: substituir fim pelo end_date real
+    if (contract?.end_date) {
+      const [py, pm] = month.split('-').map(Number);
+      const endM = pm === 12 ? 1 : pm + 1;
+      const endY = pm === 12 ? py + 1 : py;
+      const periodEndMonth = `${endY}-${String(endM).padStart(2,'0')}`;
+      const contractEndMonth = contract.end_date.substring(0, 7);
+      if (periodEndMonth === contractEndMonth || month === contractEndMonth) {
+        const ed = new Date(contract.end_date + 'T12:00:00');
+        const edStr = `${String(ed.getDate()).padStart(2,'0')}/${String(ed.getMonth()+1).padStart(2,'0')}/${ed.getFullYear()}`;
+        const parts = periodLabel.split(' a ');
+        if (parts.length === 2) return `${parts[0]} a ${edStr}`;
+      }
+    }
     return periodLabel;
   }
 
@@ -121,10 +135,14 @@ export default function ReceiptModalDB({
     const method = methodLabel(record.payment_method);
     const owed = calcOwed({ ...record, paid_amount: editablePaidAmounts[record.id] ?? record.paid_amount });
 
+    // Total em aberto de todos os registros não pagos do ano
+    const totalUnpaid = yearRecords.reduce((s, r) => s + (r.paid ? 0 : (editableValues[r.id] ?? r.rent_value)), 0);
+
     let mainStr: string;
     if (!record.paid) {
       // Aviso de cobrança para registros não pagos
       mainStr = `Aviso de cobrança para ${tenant.first_name} ${tenant.last_name}, CPF ${tenant.cpf || '—'}. Referente ao aluguel do período ${periodLabel}, no valor de ${rentFormatted}, que consta em aberto.`;
+      if (totalUnpaid > record.rent_value) mainStr += ` Total em débito: ${formatCurrency(totalUnpaid)}.`;
     } else {
       mainStr = `Recebi de ${tenant.first_name} ${tenant.last_name}, CPF ${tenant.cpf || '—'} a importância de: ${paidFormatted} referente ao aluguel para o período de ${periodLabel}.`;
       if (record.paid) mainStr += ` Forma de pagamento: ${method}.`;
@@ -151,8 +169,7 @@ export default function ReceiptModalDB({
   }
   function getRowOwed(r: FinancialRecordDB) {
     const val = editableValues[r.id] ?? r.rent_value;
-    if (!r.paid) return val;
-    // Acordo fechado: proprietário aceitou valor parcial como quitação — sem dívida
+    if (!r.paid) return val; // não pago = deve o valor inteiro
     if (r.debt_payment_method === 'acordo') return 0;
     const paidAmt = editablePaidAmounts[r.id] ?? r.paid_amount ?? r.rent_value;
     const debtPaid = r.debt_paid_amount ?? 0;
