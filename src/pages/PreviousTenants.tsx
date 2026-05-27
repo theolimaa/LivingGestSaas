@@ -145,6 +145,7 @@ export default function PreviousTenants() {
         adminName,
         debtNotice: isDebtNotice,
         totalOwed: isDebtNotice ? totalOwed : undefined,
+        contractEndDate: pt.contract?.end_date ?? null,
       });
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
