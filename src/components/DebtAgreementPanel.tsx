@@ -331,8 +331,25 @@ export function DebtAgreementPanel({ previousTenantId, apartmentId, totalOwed, t
   async function handleCreate() {
     const orig = parseFloat(form.originalAmount);
     const agreed = parseFloat(form.agreedAmount);
-    const count = parseInt(form.installmentCount);
-    if (!orig || !agreed || !count) { return; }
+    const count = agreed === 0 ? 0 : parseInt(form.installmentCount);
+    if (!orig || isNaN(agreed)) { return; }
+    // Dívida perdoada: cria acordo quitado sem parcelas
+    if (agreed === 0) {
+      await createAgreement.mutateAsync({
+        previousTenantId,
+        apartmentId,
+        originalAmount: orig,
+        agreedAmount: 0,
+        installmentCount: 0,
+        installmentValue: 0,
+        notes: form.notes || 'Dívida perdoada',
+        startDate: form.startDate,
+        forgivenDirect: true,
+      });
+      setShowCreate(false);
+      return;
+    }
+    if (!count) { return; }
     await createAgreement.mutateAsync({
       previousTenantId,
       apartmentId,
