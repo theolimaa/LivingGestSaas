@@ -242,16 +242,16 @@ function AgreementCard({
             ))}
           </div>
 
-          {/* Actions */}
-          {agreement.status === 'active' && (
-            <div className="flex gap-2 pt-1">
-              <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => {
-                setEditNotes(agreement.notes ?? '');
-                setEditAgreedAmount(String(agreement.agreed_amount));
-                setEditModal(true);
-              }}>
-                <Pencil className="w-3 h-3" /> Editar
-              </Button>
+          {/* Actions — Editar e Doc. Acordo sempre visíveis; Quitar/Cancelar só quando ativo */}
+          <div className="flex gap-2 pt-1 flex-wrap">
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => {
+              setEditNotes(agreement.notes ?? '');
+              setEditAgreedAmount(String(agreement.agreed_amount));
+              setEditModal(true);
+            }}>
+              <Pencil className="w-3 h-3" /> Editar
+            </Button>
+            {agreement.status === 'active' && (<>
               <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-green-600 hover:text-green-700"
                 onClick={() => updateAgreement.mutate({ id: agreement.id, previousTenantId, status: 'settled' })}>
                 <CheckCircle2 className="w-3 h-3" /> Quitar
@@ -260,12 +260,12 @@ function AgreementCard({
                 onClick={() => cancelAgreement.mutate({ id: agreement.id, previousTenantId })}>
                 <XCircle className="w-3 h-3" /> Cancelar
               </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-primary hover:text-primary"
-                onClick={() => downloadReceipt()}>
-                <FileText className="w-3 h-3" /> Doc. Acordo
-              </Button>
-            </div>
-          )}
+            </>)}
+            <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-primary hover:text-primary"
+              onClick={() => downloadReceipt()}>
+              <FileText className="w-3 h-3" /> Doc. Acordo
+            </Button>
+          </div>
         </div>
       )}
 
