@@ -84,11 +84,10 @@ export function useCreateDebtAgreement() {
       installmentCount: number;
       installmentValue: number;
       notes: string;
-      startDate: string; // YYYY-MM-DD — data da primeira parcela
-      forgivenDirect?: boolean; // true = dívida perdoada, cria já como settled
+      startDate: string;
     }) => {
       // 1. Criar o acordo
-      const status = forgivenDirect ? 'settled' : 'active';
+      const status = 'active';
       const { data: agreement, error: agErr } = await supabase
         .from('debt_agreements')
         .insert({
@@ -105,8 +104,8 @@ export function useCreateDebtAgreement() {
         .single();
       if (agErr) throw agErr;
 
-      // 2. Gerar parcelas (só se não for perdão direto)
-      if (!forgivenDirect && installmentCount > 0) {
+      // 2. Gerar parcelas
+      if (installmentCount > 0) {
         const installments = Array.from({ length: installmentCount }, (_, i) => {
           const due = new Date(startDate + 'T12:00:00');
           due.setMonth(due.getMonth() + i);
