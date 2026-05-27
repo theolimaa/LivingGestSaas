@@ -16,7 +16,7 @@ import { formatCurrency, formatDate } from '@/lib/utils-app';
 import {
   useDebtAgreements, useDebtInstallments,
   useCreateDebtAgreement, useUpdateDebtAgreement,
-  usePayInstallment, useUnpayInstallment, useCancelDebtAgreement, useDeleteDebtAgreement,
+  usePayInstallment, useUnpayInstallment, useCancelDebtAgreement,
   DebtAgreement,
 } from '@/hooks/useDebtAgreements';
 
@@ -151,7 +151,6 @@ function AgreementCard({
   const { data: installments = [] } = useDebtInstallments(agreement.id);
   const updateAgreement = useUpdateDebtAgreement();
   const cancelAgreement = useCancelDebtAgreement();
-  const deleteAgreement = useDeleteDebtAgreement();
   const { user } = useAuth();
   const adminName = user?.user_metadata?.username || user?.email?.split('@')[0] || 'Administrador';
   const [expanded, setExpanded] = useState(true);
@@ -265,11 +264,6 @@ function AgreementCard({
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-primary hover:text-primary"
               onClick={() => downloadReceipt()}>
               <FileText className="w-3 h-3" /> Doc. Acordo
-            </Button>
-            <Button size="sm" variant="outline" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:border-destructive/50"
-              onClick={() => { if (window.confirm('Excluir este acordo permanentemente?')) { deleteAgreement.mutate({ id: agreement.id, previousTenantId }); } }}
-              title="Excluir acordo">
-              <Trash2 className="w-3.5 h-3.5" />
             </Button>
           </div>
         </div>
