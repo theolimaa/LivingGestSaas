@@ -262,7 +262,7 @@ export default function PreviousTenants() {
           <div className="space-y-3">
             {filtered.map(pt => {
               const isOpen = expanded.has(pt.id);
-              const hasDebt = pt.totalOwed > 0;
+              const hasDebt = pt.totalOwed > 0 || pt.hasActiveAgreement;
               const contract = pt.contract;
 
               return (
