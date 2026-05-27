@@ -287,10 +287,14 @@ function AgreementCard({
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditModal(false)}>Cancelar</Button>
             <Button onClick={() => {
+              const newAmount = parseFloat(editAgreedAmount);
+              const isForgiving = !isNaN(newAmount) && newAmount === 0;
               updateAgreement.mutate({
                 id: agreement.id, previousTenantId,
-                agreed_amount: parseFloat(editAgreedAmount) || agreement.agreed_amount,
+                agreed_amount: !isNaN(newAmount) ? newAmount : agreement.agreed_amount,
                 notes: editNotes || null,
+                // Se zerou o valor → marca como quitado (dívida perdoada)
+                ...(isForgiving ? { status: 'settled' } : {}),
               });
               setEditModal(false);
             }} disabled={updateAgreement.isPending}>Salvar</Button>
