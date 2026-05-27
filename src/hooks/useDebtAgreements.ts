@@ -298,3 +298,26 @@ export function useAllDebtInstallments() {
     enabled: !!user,
   });
 }
+
+export function useDeleteDebtAgreement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, previousTenantId }: { id: string; previousTenantId: string }) => {
+      // Delete installments first (cascade should handle it, but being explicit)
+      await supabase.from('debt_installments').delete().eq('agreement_id', id);
+      const { error } = await supabase.from('debt_agreements').delete().eq('id', id);
+      if (error) throw error;
+      return previousTenantId;
+    },
+    onSuccess: (previousTenantId) => {
+      qc.invalidateQueries({ queryKey: ['debt_agreements', previousTenantId] });
+      qc.invalidateQueries({ queryKey: ['debt_agreements_all'] });
+      qc.invalidateQueries({ queryKey: ['debt_installments_all'] });
+      toast.success('Acordo excluído.');
+    },
+    onError: (e: unknown) => {
+      const msg = (e && typeof e === 'object' && 'message' in e) ? (e as any).message : String(e);
+      toast.error(`Erro: ${msg}`);
+    },
+  });
+}
