@@ -127,6 +127,7 @@ export function useCreateDebtAgreement() {
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['debt_agreements', data.previous_tenant_id] });
+      qc.invalidateQueries({ queryKey: ['debt_agreements_all'] });
       toast.success('Acordo de dívida criado!');
     },
     onError: (e: unknown) => {
@@ -153,6 +154,7 @@ export function useUpdateDebtAgreement() {
     },
     onSuccess: ({ previousTenantId }) => {
       qc.invalidateQueries({ queryKey: ['debt_agreements', previousTenantId] });
+      qc.invalidateQueries({ queryKey: ['debt_agreements_all'] });
       toast.success('Acordo atualizado!');
     },
     onError: (e: unknown) => {
@@ -257,6 +259,7 @@ export function useCancelDebtAgreement() {
     },
     onSuccess: (previousTenantId) => {
       qc.invalidateQueries({ queryKey: ['debt_agreements', previousTenantId] });
+      qc.invalidateQueries({ queryKey: ['debt_agreements_all'] });
       toast.success('Acordo cancelado.');
     },
     onError: (e: unknown) => {
