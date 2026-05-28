@@ -18,7 +18,7 @@ import {
 import { useAllPreviousTenants } from '@/hooks/useTenants';
 import { buildReceiptPDF } from '@/lib/generateReceiptPDF';
 import { DebtAgreementPanel } from '@/components/DebtAgreementPanel';
-import { useAllDebtAgreements } from '@/hooks/useDebtAgreements';
+import { useAllDebtAgreements, useAllDebtInstallments } from '@/hooks/useDebtAgreements';
 import { useAuth } from '@/hooks/useAuth';
 import { useApartments } from '@/hooks/useApartments';
 import { useCondominiums } from '@/hooks/useCondominiums';
@@ -51,6 +51,7 @@ export default function PreviousTenants() {
   const upsert = useUpsertFinancialRecord();
   const upsertContract = useUpsertContract();
   const { data: allAgreements = [] } = useAllDebtAgreements();
+  const { data: allInstallments = [] } = useAllDebtInstallments();
   const { user } = useAuth();
 
   // Modal edição de contrato
@@ -127,8 +128,22 @@ export default function PreviousTenants() {
     return true;
   });
 
-  const totalDebtAll = filtered.reduce((s, pt) => s + pt.totalOwed, 0);
-  const withDebt = filtered.filter(pt => pt.totalOwed > 0);
+  // Saldo real de parcelas não pagas de acordos ativos
+  function getAgreementBalance(ptId: string): number {
+    const activeAgreements = allAgreements.filter(a => a.previous_tenant_id === ptId && a.status === 'active');
+    return activeAgreements.reduce((s, ag) => {
+      const unpaid = allInstallments
+        .filter(i => i.agreement_id === ag.id && !i.paid)
+        .reduce((sum, i) => sum + i.amount, 0);
+      return s + unpaid;
+    }, 0);
+  }
+
+  const totalDebtAll = filtered.reduce((s, pt) => {
+    const agBalance = getAgreementBalance(pt.id);
+    return s + pt.totalOwed + agBalance;
+  }, 0);
+  const withDebt = filtered.filter(pt => pt.totalOwed > 0 || pt.hasActiveAgreement);
 
   function toggleExpand(id: string) {
     setExpanded(prev => {
