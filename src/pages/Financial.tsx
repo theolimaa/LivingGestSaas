@@ -21,6 +21,7 @@ import {
   calcReceived, calcOwed,
 } from '@/hooks/useFinancial';
 import { useContracts } from '@/hooks/useContracts';
+import { useAllDebtAgreements, useAllDebtInstallments } from '@/hooks/useDebtAgreements';
 import ReceiptModalDB from '@/components/apartment/ReceiptModalDB';
  
 type PaymentMethod = 'pix' | 'especie';
