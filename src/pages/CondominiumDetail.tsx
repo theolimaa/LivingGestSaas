@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, ChevronLeft, Home, Pencil, Trash2, User } from 'lucide-react';
+import { Plus, ChevronLeft, Home, Pencil, Trash2, User, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -256,23 +256,20 @@ export default function CondominiumDetail() {
   const { data: allFinancialRecords = [] } = useAllFinancialRecords();
  
   const cond = condominiums.find(c => c.id === id);
-  const [searchQuery, setSearchQuery] = useState('');
   const { selectedYear, selectedMonth } = state;
  
   // ✅ CORREÇÃO: receita = registros PAGOS com payment_date no mês/ano selecionado
   const condApts = apartments.filter(a => a.condominium_id === id);
-
-  // Filtro de busca por número de apartamento ou nome do inquilino
   const { data: allTenants = [] } = useTenants();
+  const [searchQuery, setSearchQuery] = useState('');
   const filteredApts = searchQuery.trim()
     ? condApts.filter(apt => {
         const q = searchQuery.toLowerCase();
         if (apt.unit_number.toLowerCase().includes(q)) return true;
-        // Verifica se algum inquilino do apartamento tem o nome no filtro
         const aptTenant = allTenants.find(t => t.apartment_id === apt.id);
         if (aptTenant) {
-          const name = `${aptTenant.first_name} ${aptTenant.last_name}`.toLowerCase();
-          if (name.includes(q)) return true;
+          const fullName = `${aptTenant.first_name} ${aptTenant.last_name}`.toLowerCase();
+          if (fullName.includes(q)) return true;
         }
         return false;
       })
@@ -365,9 +362,9 @@ export default function CondominiumDetail() {
         </div>
  
         {/* Search bar */}
-        {condApts.length > 0 && (
+        {!isLoading && condApts.length > 0 && (
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
             <Input
               className="pl-9 pr-9"
               placeholder="Buscar por apartamento ou inquilino..."
@@ -402,11 +399,10 @@ export default function CondominiumDetail() {
               <Plus className="w-4 h-4" /> Adicionar Apartamento
             </Button>
           </div>
-        ) : filteredApts.length === 0 && searchQuery ? (
+        ) : filteredApts.length === 0 ? (
           <div className="text-center py-12">
             <Search className="w-10 h-10 mx-auto mb-3 text-muted-foreground/30" />
-            <p className="text-muted-foreground font-medium">Nenhum apartamento encontrado</p>
-            <p className="text-sm text-muted-foreground mt-1">para "{searchQuery}"</p>
+            <p className="text-muted-foreground font-medium">Nenhum resultado para "{searchQuery}"</p>
             <button onClick={() => setSearchQuery('')} className="text-sm text-primary mt-2 hover:underline">
               Limpar busca
             </button>
