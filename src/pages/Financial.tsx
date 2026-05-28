@@ -259,10 +259,13 @@ export default function Financial() {
                 <AlertTriangle className="w-4 h-4" />
               </div>
             </div>
-            <p className="text-xl md:text-2xl font-bold relative z-10" style={{ color: totalOwed > 0 ? 'hsl(var(--overdue))' : 'hsl(var(--paid))' }}>
-              {formatCurrency(totalOwed)}
+            <p className="text-xl md:text-2xl font-bold relative z-10" style={{ color: totalOwedAll > 0 ? 'hsl(var(--overdue))' : 'hsl(var(--paid))' }}>
+              {formatCurrency(totalOwedAll)}
             </p>
-            <p className="text-xs text-muted-foreground mt-1.5 relative z-10">Saldo devedor dos pagos</p>
+            {agreementsOwedFinancial > 0 && (
+              <p className="text-xs text-muted-foreground mt-1 relative z-10">🤝 Acordos: {formatCurrency(agreementsOwedFinancial)}</p>
+            )}
+            <p className="text-xs text-muted-foreground mt-1 relative z-10">Saldo devedor dos pagos</p>
           </div>
         </div>
  
