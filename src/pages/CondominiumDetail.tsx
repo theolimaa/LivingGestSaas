@@ -256,10 +256,27 @@ export default function CondominiumDetail() {
   const { data: allFinancialRecords = [] } = useAllFinancialRecords();
  
   const cond = condominiums.find(c => c.id === id);
+  const [searchQuery, setSearchQuery] = useState('');
   const { selectedYear, selectedMonth } = state;
  
   // ✅ CORREÇÃO: receita = registros PAGOS com payment_date no mês/ano selecionado
   const condApts = apartments.filter(a => a.condominium_id === id);
+
+  // Filtro de busca por número de apartamento ou nome do inquilino
+  const { data: allTenants = [] } = useTenants();
+  const filteredApts = searchQuery.trim()
+    ? condApts.filter(apt => {
+        const q = searchQuery.toLowerCase();
+        if (apt.unit_number.toLowerCase().includes(q)) return true;
+        // Verifica se algum inquilino do apartamento tem o nome no filtro
+        const aptTenant = allTenants.find(t => t.apartment_id === apt.id);
+        if (aptTenant) {
+          const name = `${aptTenant.first_name} ${aptTenant.last_name}`.toLowerCase();
+          if (name.includes(q)) return true;
+        }
+        return false;
+      })
+    : condApts;
   const totalReceived = allFinancialRecords
     .filter(r => {
       if (!condApts.some(a => a.id === r.apartment_id)) return false;
@@ -347,6 +364,27 @@ export default function CondominiumDetail() {
           </div>
         </div>
  
+        {/* Search bar */}
+        {condApts.length > 0 && (
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              className="pl-9 pr-9"
+              placeholder="Buscar por apartamento ou inquilino..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Apartments grid */}
         {isLoading ? (
           <div className="flex items-center justify-center py-16">
@@ -364,9 +402,18 @@ export default function CondominiumDetail() {
               <Plus className="w-4 h-4" /> Adicionar Apartamento
             </Button>
           </div>
+        ) : filteredApts.length === 0 && searchQuery ? (
+          <div className="text-center py-12">
+            <Search className="w-10 h-10 mx-auto mb-3 text-muted-foreground/30" />
+            <p className="text-muted-foreground font-medium">Nenhum apartamento encontrado</p>
+            <p className="text-sm text-muted-foreground mt-1">para "{searchQuery}"</p>
+            <button onClick={() => setSearchQuery('')} className="text-sm text-primary mt-2 hover:underline">
+              Limpar busca
+            </button>
+          </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
-            {apartments.map(apt => (
+            {filteredApts.map(apt => (
               <ApartmentCard
                 key={apt.id}
                 apt={apt}
