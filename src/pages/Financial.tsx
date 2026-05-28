@@ -52,6 +52,8 @@ export default function Financial() {
   const { data: allTenants = [] } = useTenants();
   const { data: financialRecords = [], isLoading } = useAllFinancialRecords();
   const { data: contracts = [] } = useContracts();
+  const { data: allDebtAgreements = [] } = useAllDebtAgreements();
+  const { data: allDebtInstallments = [] } = useAllDebtInstallments();
   const upsert = useUpsertFinancialRecord();
  
   const [filterYear, setFilterYear] = useState('2026');
@@ -144,6 +146,17 @@ export default function Financial() {
   const totalOwed = filtered
     .filter(r => r.paid)
     .reduce((s, r) => s + calcOwed(r), 0);
+
+  // Saldo de parcelas não pagas de acordos ativos também entra em Devendo
+  const agreementsOwedFinancial = allDebtAgreements
+    .filter(ag => ag.status === 'active')
+    .reduce((s, ag) => {
+      const unpaid = allDebtInstallments
+        .filter(i => i.agreement_id === ag.id && !i.paid)
+        .reduce((sum, i) => sum + i.amount, 0);
+      return s + unpaid;
+    }, 0);
+  const totalOwedAll = totalOwed + agreementsOwedFinancial;
  
   function openPaymentModal(record: FinancialRecordDB) {
     setPaymentModal({
