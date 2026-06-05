@@ -10,6 +10,7 @@ import { ApartmentDB } from '@/hooks/useApartments';
 import { TenantDB } from '@/hooks/useTenants';
 import { ContractDB } from '@/hooks/useContracts';
 import { useAuth } from '@/hooks/useAuth';
+import { useResidents } from '@/hooks/useTenants';
 import { useSaveReceipt } from '@/hooks/useReceipts';
 import jsPDF from 'jspdf';
 
@@ -58,6 +59,7 @@ export default function ReceiptModalDB({
   open, onClose, record, apartment, tenant, contract, allRecords, condominiumName,
 }: Props) {
   const { user } = useAuth();
+  const { data: residents = [] } = useResidents(tenant.id);
   const saveReceipt = useSaveReceipt();
   // editableValues: overrides para a coluna "Valor" por registro
   const [editableValues, setEditableValues] = useState<Record<string, number>>({});
@@ -146,6 +148,13 @@ export default function ReceiptModalDB({
       mainStr = `Recebi de ${tenant.first_name} ${tenant.last_name}, CPF ${tenant.cpf || '—'} a importância de: ${paidFormatted} referente ao aluguel para o período de ${periodLabel}.`;
       if (record.paid) mainStr += ` Forma de pagamento: ${method}.`;
       if (owed > 0) mainStr += ` Saldo devedor: ${formatCurrency(owed)}.`;
+    }
+    // Adicionar moradores ao texto do recibo
+    if (residents.length > 0) {
+      const residentList = residents.map((r: any) =>
+        `${r.first_name} ${r.last_name}${r.cpf ? ', CPF ' + r.cpf : ''}`
+      ).join('; ');
+      mainStr += ` Moradores adicionais: ${residentList}.`;
     }
 
     const titlePrefix = record.paid ? 'RECIBO' : 'AVISO DE COBRANÇA';
