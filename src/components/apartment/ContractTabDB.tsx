@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
-import { AlertTriangle, CheckCircle, XCircle, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, CheckCircle, XCircle, Loader2, RefreshCw, FileText } from 'lucide-react';
+import { jsPDF } from 'jspdf';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -27,9 +28,13 @@ function generateMonthOptions(startDate: string): { value: string; label: string
   return options;
 }
 
-export default function ContractTabDB({ tenantId, apartmentId, tenantName }: {
+export default function ContractTabDB({ tenantId, apartmentId, tenantName, tenantCpf, condominiumName, apartmentUnit, adminName }: {
   tenantId: string;
   apartmentId: string;
+  tenantCpf?: string | null;
+  condominiumName?: string;
+  apartmentUnit?: string;
+  adminName?: string;
   tenantName: string;
 }) {
   const { data: contract, isLoading } = useContract(tenantId);
@@ -40,6 +45,31 @@ export default function ContractTabDB({ tenantId, apartmentId, tenantName }: {
 
   const [editing, setEditing] = useState(false);
   const [showClose, setShowClose] = useState(false);
+
+  function handleCautionReceipt() {
+    if (!contract?.caution_paid || !contract.caution_value) return;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const ml = 20;
+    let y = 20;
+    const today = new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
+    const addText = (text: string, size = 10, bold = false) => {
+      doc.setFontSize(size); doc.setFont('helvetica', bold ? 'bold' : 'normal');
+      const lines = doc.splitTextToSize(text, 170);
+      doc.text(lines, ml, y); y += lines.length * (size * 0.45) + 2;
+    };
+    const addLine = () => { doc.setDrawColor(200, 200, 200); doc.line(ml, y, 190, y); y += 4; };
+    addText(`RECIBO DE CAUCAO - APTO ${apartmentUnit ?? ''} - ${tenantName} - ${today}`, 12, true);
+    addLine();
+    addText(`Recebi de ${tenantName}${tenantCpf ? ', CPF ' + tenantCpf : ''} a titulo de caucao referente ao contrato de locacao do apartamento ${apartmentUnit ?? ''} do ${condominiumName ?? ''}, a importancia de ${formatCurrency(contract.caution_value)}${contract.caution_date ? ', paga em ' + formatDate(contract.caution_date) : ''}.`, 10);
+    y += 4; addLine();
+    addText(`Fortaleza, ${today} - ${adminName ?? 'Administrador'} - Confira seu recibo.`, 9);
+    const blob = new Blob([doc.output('arraybuffer')], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = Object.assign(document.createElement('a'), { href: url, download: `Caucao_${(apartmentUnit ?? '').replace(' ', '_')}_${tenantName.replace(' ', '_')}.pdf` });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast.success('Recibo de caucao gerado!');
+  }
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Calcula aluguel proporcional ao encerrar contrato
@@ -409,11 +439,20 @@ export default function ContractTabDB({ tenantId, apartmentId, tenantName }: {
         )}
         {contract?.caution_paid && (
           <div className="bg-muted/50 rounded-xl p-4 col-span-2">
-            <p className="text-xs text-muted-foreground mb-1">Caução</p>
-            <p className="font-semibold text-sm">
-              Paga{contract.caution_value ? ` — ${formatCurrency(contract.caution_value)}` : ''}
-              {contract.caution_date ? ` em ${formatDate(contract.caution_date)}` : ''}
-            </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Caução</p>
+                <p className="font-semibold text-sm">
+                  Paga{contract.caution_value ? ` — ${formatCurrency(contract.caution_value)}` : ''}
+                  {contract.caution_date ? ` em ${formatDate(contract.caution_date)}` : ''}
+                </p>
+              </div>
+              {contract.caution_value && (
+                <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8" onClick={handleCautionReceipt}>
+                  <FileText className="w-3.5 h-3.5" /> Recibo da Caução
+                </Button>
+              )}
+            </div>
           </div>
         )}
       </div>
