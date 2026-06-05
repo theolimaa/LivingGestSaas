@@ -11,6 +11,7 @@ import Layout from '@/components/Layout';
 import { useApartment, useApartments } from '@/hooks/useApartments';
 import { useTenants, useAddTenant, usePreviousTenants } from '@/hooks/useTenants';
 import { useCondominiums } from '@/hooks/useCondominiums';
+import { useAuth } from '@/hooks/useAuth';
 import TenantTabDB from '@/components/apartment/TenantTabDB';
 import DocumentsTabDB from '@/components/apartment/DocumentsTabDB';
 import ContractTabDB from '@/components/apartment/ContractTabDB';
@@ -137,6 +138,8 @@ export default function ApartmentDetail() {
 
   const currentTenant = tenants[0];
   const cond = condominiums.find(c => c.id === apartment?.condominium_id);
+  const { user } = useAuth();
+  const adminName = user?.user_metadata?.username || user?.email?.split('@')[0] || 'Administrador';
 
   // Ordenação natural dos apartamentos (mesmo critério da listagem)
   const sortedApts = [...condoApartments].sort((a, b) =>
@@ -277,6 +280,10 @@ export default function ApartmentDetail() {
                   tenantId={currentTenant.id}
                   apartmentId={apartment.id}
                   tenantName={`${currentTenant.first_name} ${currentTenant.last_name}`}
+                  tenantCpf={currentTenant.cpf}
+                  condominiumName={cond?.name ?? ''}
+                  apartmentUnit={apartment.unit_number}
+                  adminName={adminName}
                 />
               </TabsContent>
               <TabsContent value="financial">
