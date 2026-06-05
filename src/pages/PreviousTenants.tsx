@@ -303,6 +303,10 @@ export default function PreviousTenants() {
                             <Badge color="gray">
                               <Handshake className="w-3 h-3" />
                               Acordo em andamento
+                              {(() => {
+                                const bal = getAgreementBalance(pt.id);
+                                return bal > 0 ? ` · ${formatCurrency(bal)}` : '';
+                              })()}
                             </Badge>
                           ) : (
                             <Badge color="red">
