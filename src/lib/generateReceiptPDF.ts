@@ -313,7 +313,7 @@ export function buildDebtAgreementReceiptPDF(p: DebtAgreementReceiptParams): Uin
     const method = inst?.payment_method === 'pix' ? 'Pix' : inst?.payment_method === 'especie' ? 'Espécie' : '';
     mainText = `Recebi de ${p.tenantFirstName} ${p.tenantLastName}, CPF ${p.tenantCpf || '—'}, a importância de ${formatCurrency(inst?.amount ?? p.agreement.installment_value)} referente à parcela ${p.highlightInstallment}/${p.agreement.installment_count} do acordo de dívida do apartamento ${p.apartmentUnit}.`;
     if (method && inst?.payment_date) mainText += ` Pago via ${method} em ${formatDate(inst.payment_date)}.`;
-    if (remaining - (inst?.amount ?? 0) > 0) mainText += ` Saldo restante do acordo: ${formatCurrency(Math.max(0, remaining - (inst?.amount ?? 0)))}.`;
+    if (remaining > 0) mainText += ` Saldo restante do acordo: ${formatCurrency(remaining)}.`;
   } else {
     mainText = `Aviso de acordo de dívida para ${p.tenantFirstName} ${p.tenantLastName}, CPF ${p.tenantCpf || '—'}. Dívida original: ${formatCurrency(p.agreement.original_amount)}. Valor acordado: ${formatCurrency(p.agreement.agreed_amount)} em ${p.agreement.installment_count} parcelas de ${formatCurrency(p.agreement.installment_value)}.`;
     if (p.agreement.notes) mainText += ` Obs: ${p.agreement.notes}.`;
