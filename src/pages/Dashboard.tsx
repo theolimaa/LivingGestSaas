@@ -299,63 +299,6 @@ export default function Dashboard() {
     }, 0);
   const totalOwedAll = totalOwed + agreementsOwed + formerUnpaidOwed;
 
-  // ── KPIs ─────────────────────────────────────────────────────────────────
-
-  // 1. Taxa de inadimplência
-  const overdueAptIds = new Set(overdueRecords.map(r => r.apartment_id));
-  const taxaInadimplencia = occupiedCount > 0
-    ? Math.round((overdueAptIds.size / occupiedCount) * 100)
-    : 0;
-
-  // 2. Eficiência de recebimento
-  const expectedTotal = totalReceived + totalPending + totalOverdue;
-  const eficienciaRecebimento = expectedTotal > 0
-    ? Math.round((totalReceived / expectedTotal) * 100)
-    : 100;
-
-  // 3. Tempo médio de atraso
-  const delayDays = receivedRecords
-    .filter(r => r.payment_date && r.dueDate)
-    .map(r => Math.max(0, Math.round(
-      (new Date(r.payment_date!).getTime() - new Date(r.dueDate!).getTime()) / 86400000
-    )))
-    .filter(d => d > 0);
-  const tempoMedioAtraso = delayDays.length > 0
-    ? Math.round(delayDays.reduce((s, d) => s + d, 0) / delayDays.length)
-    : 0;
-  const pctAtraso = receivedRecords.length > 0
-    ? Math.round((delayDays.length / receivedRecords.length) * 100)
-    : 0;
-
-  // 4. Cobertura de acordos
-  const formerWithDebt = previousTenants.filter(pt =>
-    financialRecords.some(r => r.tenant_id === pt.original_id && !r.paid) ||
-    allDebtAgreements.some(a => a.previous_tenant_id === pt.id)
-  );
-  const formerWithAgreement = formerWithDebt.filter(pt =>
-    allDebtAgreements.some(a => a.previous_tenant_id === pt.id && (a.status === 'active' || a.status === 'settled'))
-  );
-  const coberturaAcordos = formerWithDebt.length > 0
-    ? Math.round((formerWithAgreement.length / formerWithDebt.length) * 100)
-    : 100;
-
-  // 5. Taxa de cumprimento de acordos
-  const nowDate = new Date();
-  const duedInstallments = debtInstallments.filter(i => i.due_date && new Date(i.due_date) <= nowDate);
-  const paidOnDueInstallments = duedInstallments.filter(i => i.paid);
-  const taxaCumprimentoAcordos = duedInstallments.length > 0
-    ? Math.round((paidOnDueInstallments.length / duedInstallments.length) * 100)
-    : 100;
-
-  // 6. Ticket médio por unidade ocupada
-  const aptRentMap = new Map<string, number>();
-  financialRecords.forEach(r => {
-    if (!aptRentMap.has(r.apartment_id) && allTenants.some(t => t.apartment_id === r.apartment_id))
-      aptRentMap.set(r.apartment_id, r.rent_value);
-  });
-  const ticketMedio = aptRentMap.size > 0
-    ? Array.from(aptRentMap.values()).reduce((s, v) => s + v, 0) / aptRentMap.size
-    : 0;
 
   // Parcelas não pagas de acordos — entram em "A Receber" com suas datas
   const pendingInstallmentRows = debtInstallments
@@ -427,6 +370,69 @@ export default function Dashboard() {
  
   // Count occupied apts
   const occupiedCount = apartments.filter(a => allTenants.some(t => t.apartment_id === a.id)).length;
+  // ── KPIs ─────────────────────────────────────────────────────────────────
+
+  // 1. Taxa de inadimplência
+  const overdueAptIds = new Set(overdueRecords.map(r => r.apartment_id));
+  const taxaInadimplencia = occupiedCount > 0
+    ? Math.round((overdueAptIds.size / occupiedCount) * 100)
+    : 0;
+
+  // 2. Eficiência de recebimento
+  const expectedTotal = totalReceived + totalPending + totalOverdue;
+  const eficienciaRecebimento = expectedTotal > 0
+    ? Math.round((totalReceived / expectedTotal) * 100)
+    : 100;
+
+  // 3. Tempo médio de atraso — usa dueDateMonth (YYYY-MM) como proxy do vencimento
+  const delayDays = receivedRecords
+    .filter(r => r.payment_date && r.dueDateMonth)
+    .map(r => {
+      // dueDateMonth = "YYYY-MM", assume vencimento no dia do paymentDay do contrato
+      const contract = contracts.find(c => c.id === r.contract_id);
+      const day = contract?.payment_day ?? 5;
+      const [y, m] = r.dueDateMonth!.split('-').map(Number);
+      const dueDate = new Date(y, m - 1, day);
+      const paidDate = new Date(r.payment_date!);
+      return Math.max(0, Math.round((paidDate.getTime() - dueDate.getTime()) / 86400000));
+    })
+    .filter(d => d > 0);
+  const tempoMedioAtraso = delayDays.length > 0
+    ? Math.round(delayDays.reduce((s, d) => s + d, 0) / delayDays.length)
+    : 0;
+  const pctAtraso = receivedRecords.length > 0
+    ? Math.round((delayDays.length / receivedRecords.length) * 100)
+    : 0;
+
+  // 4. Cobertura de acordos
+  const formerWithDebt = previousTenants.filter(pt =>
+    financialRecords.some(r => r.tenant_id === pt.original_id && !r.paid) ||
+    allDebtAgreements.some(a => a.previous_tenant_id === pt.id)
+  );
+  const formerWithAgreement = formerWithDebt.filter(pt =>
+    allDebtAgreements.some(a => a.previous_tenant_id === pt.id && (a.status === 'active' || a.status === 'settled'))
+  );
+  const coberturaAcordos = formerWithDebt.length > 0
+    ? Math.round((formerWithAgreement.length / formerWithDebt.length) * 100)
+    : 100;
+
+  // 5. Taxa de cumprimento de acordos
+  const nowDate = new Date();
+  const duedInstallments = debtInstallments.filter(i => i.due_date && new Date(i.due_date) <= nowDate);
+  const paidOnDueInstallments = duedInstallments.filter(i => i.paid);
+  const taxaCumprimentoAcordos = duedInstallments.length > 0
+    ? Math.round((paidOnDueInstallments.length / duedInstallments.length) * 100)
+    : 100;
+
+  // 6. Ticket médio por unidade ocupada
+  const aptRentMap = new Map<string, number>();
+  financialRecords.forEach(r => {
+    if (!aptRentMap.has(r.apartment_id) && allTenants.some(t => t.apartment_id === r.apartment_id))
+      aptRentMap.set(r.apartment_id, r.rent_value);
+  });
+  const ticketMedio = aptRentMap.size > 0
+    ? Array.from(aptRentMap.values()).reduce((s, v) => s + v, 0) / aptRentMap.size
+    : 0;
  
   return (
     <Layout>
