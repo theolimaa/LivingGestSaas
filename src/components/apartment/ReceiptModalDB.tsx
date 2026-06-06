@@ -149,11 +149,13 @@ export default function ReceiptModalDB({
       if (record.paid) mainStr += ` Forma de pagamento: ${method}.`;
       if (owed > 0) mainStr += ` Saldo devedor: ${formatCurrency(owed)}.`;
     }
-    // Adicionar moradores ao texto do recibo
+
+    // Adicionar moradores ao texto (ResidentDB usa name/surname)
     if (residents.length > 0) {
-      const residentList = residents.map((r: any) =>
-        `${r.first_name} ${r.last_name}${r.cpf ? ', CPF ' + r.cpf : ''}`
-      ).join('; ');
+      const residentList = residents.map((res: any) => {
+        const fullName = res.name + (res.surname ? ' ' + res.surname : '');
+        return fullName + (res.cpf ? ', CPF ' + res.cpf : '');
+      }).join('; ');
       mainStr += ` Moradores adicionais: ${residentList}.`;
     }
 
@@ -173,7 +175,7 @@ export default function ReceiptModalDB({
     // Acordo: retorna o valor real pago (sem somar debtPaid, sem cap no rent_value)
     if (r.debt_payment_method === 'acordo') return paidAmt;
     const debtPaid = r.debt_paid_amount ?? 0;
-    return Math.min(editableValues[r.id] ?? r.rent_value, paidAmt + debtPaid);
+    return paidAmt + debtPaid; // sem cap: pagamentos podem ser maiores que o aluguel base
   }
   function getRowOwed(r: FinancialRecordDB) {
     const val = editableValues[r.id] ?? r.rent_value;
