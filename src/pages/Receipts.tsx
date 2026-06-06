@@ -17,7 +17,9 @@ import { useApartments } from '@/hooks/useApartments';
 import { useTenants, useAllPreviousTenants } from '@/hooks/useTenants';
 import { useContracts } from '@/hooks/useContracts';
 import { useAuth } from '@/hooks/useAuth';
-import { buildReceiptPDF } from '@/lib/generateReceiptPDF';
+import { buildReceiptPDF, buildDebtAgreementReceiptPDF } from '@/lib/generateReceiptPDF';
+import { useAllDebtAgreements, useAllDebtInstallments } from '@/hooks/useDebtAgreements';
+import { jsPDF } from 'jspdf';
 import { useGoogleDrive, DriveConfig } from '@/hooks/useGoogleDrive';
 import { toast } from 'sonner';
 import JSZip from 'jszip';
@@ -36,6 +38,8 @@ export default function Receipts() {
   const { data: apartments = [] } = useApartments();
   const { data: allTenants = [] } = useTenants();
   const { data: previousTenants = [] } = useAllPreviousTenants();
+  const { data: allDebtAgreements = [] } = useAllDebtAgreements();
+  const { data: allDebtInstallments = [] } = useAllDebtInstallments();
   const { data: contracts = [] } = useContracts();
   const drive = useGoogleDrive();
 
@@ -149,20 +153,109 @@ export default function Receipts() {
     finally { setDownloading(false); }
   }
 
+  function buildCautionFiles() {
+    // Cauções: contratos criados no mês selecionado com caução paga
+    const results: any[] = [];
+    for (const r of enriched) {
+      if (!r.contract?.caution_paid || !r.contract?.caution_value) continue;
+      if (!r.contract?.start_date) continue;
+      const contractMonth = r.contract.start_date.substring(0, 7);
+      // Só inclui se o contrato foi criado no mês filtrado
+      if (selectedMonthKey && contractMonth !== selectedMonthKey) continue;
+      if (!selectedMonthKey && !contractMonth.startsWith(String(selectedYear))) continue;
+      try {
+        const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+        const ml = 20; let y = 20;
+        const today = new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
+        const addText = (text: string, size = 10, bold = false) => {
+          doc.setFontSize(size); doc.setFont('helvetica', bold ? 'bold' : 'normal');
+          const lines = doc.splitTextToSize(text, 170);
+          doc.text(lines, ml, y); y += lines.length * (size * 0.45) + 2;
+        };
+        const addLine = () => { doc.setDrawColor(200,200,200); doc.line(ml, y, 190, y); y += 4; };
+        const tenantName = `${r.tenant!.first_name} ${r.tenant!.last_name}`;
+        addText(`RECIBO DE CAUCAO - APTO ${r.apt!.unit_number} - ${tenantName} - ${today}`, 12, true);
+        addLine();
+        addText(`Recebi de ${tenantName}${r.tenant!.cpf ? ', CPF ' + r.tenant!.cpf : ''} a titulo de caucao referente ao contrato de locacao do apartamento ${r.apt!.unit_number} do ${r.condo?.name ?? ''}, a importancia de ${r.contract.caution_value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}${r.contract.caution_date ? ', paga em ' + new Date(r.contract.caution_date + 'T12:00:00').toLocaleDateString('pt-BR') : ''}.`, 10);
+        y += 4; addLine();
+        addText(`Fortaleza, ${today} - ${adminName} - Confira seu recibo.`, 9);
+        results.push({
+          condoName: r.condo?.name ?? 'Sem_Condominio',
+          aptUnit: r.apt!.unit_number,
+          tenantName: `${r.tenant!.first_name}_${r.tenant!.last_name}`,
+          month: contractMonth,
+          subFolder: 'Caucoes',
+          fileName: `Caucao_${r.apt!.unit_number}_${r.tenant!.first_name}_${r.tenant!.last_name}.pdf`,
+          pdfBytes: doc.output('arraybuffer') as unknown as Uint8Array,
+          ok: true,
+        });
+      } catch { /* skip */ }
+    }
+    return results;
+  }
+
+  function buildDebtReceiptFiles() {
+    // Recibos de dívidas: parcelas pagas no mês selecionado
+    const results: any[] = [];
+    for (const inst of allDebtInstallments) {
+      if (!inst.paid || !inst.payment_date) continue;
+      const instMonth = inst.payment_date.substring(0, 7);
+      if (selectedMonthKey && instMonth !== selectedMonthKey) continue;
+      if (!selectedMonthKey && !instMonth.startsWith(String(selectedYear))) continue;
+      try {
+        const ag = allDebtAgreements.find((a: any) => a.id === inst.agreement_id);
+        if (!ag) continue;
+        const pt = previousTenants.find((p: any) => p.id === ag.previous_tenant_id);
+        const apt = apartments.find((a: any) => a.id === ag.apartment_id);
+        const condo = condominiums.find((c: any) => c.id === apt?.condominium_id);
+        if (!pt || !apt) continue;
+        const allInsts = allDebtInstallments.filter((i: any) => i.agreement_id === ag.id);
+        const pdfBytes = buildDebtAgreementReceiptPDF({
+          agreement: ag,
+          installments: allInsts,
+          tenantFirstName: pt.first_name,
+          tenantLastName: pt.last_name,
+          tenantCpf: pt.cpf,
+          apartmentUnit: apt.unit_number,
+          condominiumName: condo?.name ?? '',
+          adminName,
+          highlightInstallment: inst.installment_number,
+        });
+        results.push({
+          condoName: condo?.name ?? 'Sem_Condominio',
+          aptUnit: apt.unit_number,
+          tenantName: `${pt.first_name}_${pt.last_name}`,
+          month: instMonth,
+          subFolder: 'Recibos_de_Dividas',
+          fileName: `Divida_Parcela${inst.installment_number}_${apt.unit_number}_${pt.first_name}_${pt.last_name}.pdf`,
+          pdfBytes,
+          ok: true,
+        });
+      } catch { /* skip */ }
+    }
+    return results;
+  }
+
   async function handleDriveUpload() {
     if (!driveConfig) { toast.error('Configure a pasta do Drive primeiro.'); return; }
-    if (!enriched.length) { toast.error('Nenhum recibo para enviar neste período.'); return; }
     setDriveUploading(true);
-    setProgress({ done: 0, total: enriched.length });
     try {
+      const regularFiles = buildFiles().filter(f => f.ok);
+      const cautionFiles = buildCautionFiles();
+      const debtFiles = buildDebtReceiptFiles();
+      const allFiles = [...regularFiles, ...cautionFiles, ...debtFiles];
+      if (!allFiles.length) { toast.error('Nenhum arquivo para enviar neste período.'); return; }
+      setProgress({ done: 0, total: allFiles.length });
       const result = await drive.uploadReceipts(
-        buildFiles().filter(f => f.ok),
+        allFiles,
         driveConfig,
         (done, total) => setProgress({ done, total }),
       );
+      const extras = (cautionFiles.length > 0 ? ` + ${cautionFiles.length} caução(ões)` : '') +
+                     (debtFiles.length > 0 ? ` + ${debtFiles.length} recibo(s) de dívida` : '');
       result.failed > 0
         ? toast.warning(`${result.uploaded} enviados, ${result.failed} falharam.`)
-        : toast.success(`${result.uploaded} recibo${result.uploaded !== 1 ? 's' : ''} enviado${result.uploaded !== 1 ? 's' : ''} ao Drive!`);
+        : toast.success(`${result.uploaded} arquivo(s) enviado(s) ao Drive${extras}!`);
     } catch (err: any) { toast.error(`Erro: ${err.message}`); }
     finally { setDriveUploading(false); setProgress(null); }
   }
