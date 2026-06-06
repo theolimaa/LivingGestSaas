@@ -116,7 +116,7 @@ export function useGoogleDrive() {
   }, [token]);
 
   async function uploadReceipts(
-    files: Array<{ condoName: string; aptUnit: string; tenantName: string; month: string; pdfBytes: Uint8Array }>,
+    files: Array<{ condoName: string; aptUnit: string; tenantName: string; month: string; pdfBytes: Uint8Array; subFolder?: string; fileName?: string }>,
     config: DriveConfig,
     onProgress?: (done: number, total: number) => void
   ): Promise<DriveUploadResult> {
@@ -141,8 +141,12 @@ export function useGoogleDrive() {
         const recibosId = await cached(`r:${f.condoName}`,          'Recibos',    condoId);
         const yearId    = await cached(`y:${f.condoName}:${year}`,  String(year), recibosId);
         const monthId   = await cached(`m:${f.condoName}:${f.month}`, monthLabel, yearId);
-        const safeName  = `Recibo_${f.aptUnit}_${f.tenantName}.pdf`.replace(/\s+/g, '_');
-        await uploadPDF(safeName, f.pdfBytes, monthId, tok);
+        // Se tiver subpasta (ex: Cauções, Recibos de Dívidas), cria dentro do mês
+        const targetId  = f.subFolder
+          ? await cached(`s:${f.condoName}:${f.month}:${f.subFolder}`, f.subFolder, monthId)
+          : monthId;
+        const safeName  = f.fileName ?? `Recibo_${f.aptUnit}_${f.tenantName}.pdf`;
+        await uploadPDF(safeName.replace(/\s+/g, '_'), f.pdfBytes, targetId, tok);
         result.uploaded++;
       } catch (err: any) {
         result.failed++;
