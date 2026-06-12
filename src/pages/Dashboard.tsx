@@ -102,8 +102,10 @@ function DetailModal({ open, onClose, title, records, tenants, apartments, condo
     const condo = apt ? condominiums.find(c => c.id === apt.condominium_id) : null;
     const contract = contracts.find(ct => ct.id === r.contract_id);
     let dateCol: string;
-    if (variant === 'received' || variant === 'debt') {
+    if (variant === 'received') {
       dateCol = r.payment_date ?? '-';
+    } else if (variant === 'debt') {
+      dateCol = r.paid ? (r.payment_date ?? '-') : (r.month ?? '-');
     } else {
       const { dueDateLabel } = getPeriodAndDueDate(r.month, contract?.start_date ?? null, contract?.payment_day ?? 1, contract?.desired_payment_day, contract?.desired_payment_date);
       dateCol = dueDateLabel;
@@ -119,7 +121,7 @@ function DetailModal({ open, onClose, title, records, tenants, apartments, condo
     return sortDir === 'asc' ? cmp : -cmp;
   }) : enriched;
  
-  const lastColLabel = variant === 'received' || variant === 'debt' ? 'Data Pagamento' : 'Vencimento';
+  const lastColLabel = variant === 'received' ? 'Data Pagamento' : variant === 'debt' ? 'Referência' : 'Vencimento';
  
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -166,7 +168,7 @@ function DetailModal({ open, onClose, title, records, tenants, apartments, condo
                           </Link>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 text-right font-semibold text-sm">{formatCurrency(variant === 'received' ? calcReceived(r) : variant === 'debt' ? calcOwed(r) : r.rent_value)}</td>
+                      <td className="px-3 py-2.5 text-right font-semibold text-sm">{formatCurrency(variant === 'received' ? calcReceived(r) : variant === 'debt' ? (!r.paid ? r.rent_value : calcOwed(r)) : r.rent_value)}</td>
                       <td className="px-3 py-2.5 text-center text-xs text-muted-foreground">{r.dateCol}</td>
                     </tr>
                   );
@@ -289,6 +291,16 @@ export default function Dashboard() {
       return r.rent_value > 0;
     })
     .reduce((s, r) => s + r.rent_value, 0);
+
+  // Mesmos registros, mas como objetos completos para o modal "Ver detalhes"
+  const formerUnpaidRecordsForModal = financialRecords
+    .filter(r => {
+      if (r.paid) return false;
+      if (!previousTenantIds.has(r.tenant_id ?? '')) return false;
+      if (activeAgreementTenantIds.has(r.tenant_id ?? '')) return false;
+      return r.rent_value > 0;
+    })
+    .map(r => ({ ...r, computedStatus: 'overdue' as const, isFormer: true, dueDateMonth: null, paymentMonth: null }));
 
   // Saldo restante de acordos de dívida ativos entra no Devendo
   const agreementsOwed = allDebtAgreements
@@ -801,8 +813,11 @@ export default function Dashboard() {
         open={debtModal}
         onClose={() => setDebtModal(false)}
         title={`Devendo — ${filterLabel} ${selectedYear}`}
-        records={debtRecords}
-        tenants={allTenants}
+        records={[...debtRecords, ...formerUnpaidRecordsForModal]}
+        tenants={[
+          ...allTenants,
+          ...previousTenants.map(pt => ({ id: pt.original_id ?? '', first_name: pt.first_name, last_name: pt.last_name })),
+        ]}
         apartments={apartments}
         condominiums={condominiums}
         variant="debt"
