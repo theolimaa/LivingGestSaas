@@ -15,6 +15,7 @@ import {
   FileText,
   Building2,
   History,
+  Files,
 } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
@@ -34,6 +35,7 @@ const navItems = [
     ],
   },
   { label: 'Recibos', icon: FileText, path: '/recibos' },
+  { label: 'Documentos', icon: Files, path: '/documentos' },
   { label: 'Anteriores', icon: History, path: '/anteriores' },
 ];
  
