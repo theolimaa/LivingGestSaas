@@ -281,13 +281,21 @@ export default function Dashboard() {
       .map(ag => previousTenants.find(pt => pt.id === ag.previous_tenant_id)?.original_id)
       .filter(Boolean)
   );
+  // Acordos quitados ou cancelados = dívida zerada (perdoada ou encerrada)
+  const settledAgreementTenantIds = new Set(
+    allDebtAgreements
+      .filter(ag => ag.status === 'settled' || ag.status === 'cancelled')
+      .map(ag => previousTenants.find(pt => pt.id === ag.previous_tenant_id)?.original_id)
+      .filter(Boolean)
+  );
   // Ex-inquilinos SEM acordo ativo: usa financialRecords diretamente (enrichedRecords
   // exclui registros não pagos de contratos encerrados, o que é o caso de todos os ex-inquilinos)
   const formerUnpaidOwed = financialRecords
     .filter(r => {
       if (r.paid) return false;
       if (!previousTenantIds.has(r.tenant_id ?? '')) return false;
-      if (activeAgreementTenantIds.has(r.tenant_id ?? '')) return false; // skip: tem acordo ativo
+      if (activeAgreementTenantIds.has(r.tenant_id ?? '')) return false;  // tem acordo ativo → usa agreementsOwed
+      if (settledAgreementTenantIds.has(r.tenant_id ?? '')) return false; // acordo quitado/cancelado → dívida zerada
       return r.rent_value > 0;
     })
     .reduce((s, r) => s + r.rent_value, 0);
@@ -298,6 +306,7 @@ export default function Dashboard() {
       if (r.paid) return false;
       if (!previousTenantIds.has(r.tenant_id ?? '')) return false;
       if (activeAgreementTenantIds.has(r.tenant_id ?? '')) return false;
+      if (settledAgreementTenantIds.has(r.tenant_id ?? '')) return false;
       return r.rent_value > 0;
     })
     .map(r => ({ ...r, computedStatus: 'overdue' as const, isFormer: true, dueDateMonth: null, paymentMonth: null }));
