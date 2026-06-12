@@ -15,6 +15,7 @@ import Financial from "./pages/Financial";
 import MonthlyReport from "./pages/MonthlyReport";
 import VacancyIndex from "./pages/VacancyIndex";
 import Receipts from "./pages/Receipts";
+import Documents from "./pages/Documents";
 import CondominiumDetail from "./pages/CondominiumDetail";
 import ApartmentDetail from "./pages/ApartmentDetail";
 import Profile from "./pages/Profile";
@@ -59,6 +60,7 @@ function AppRoutes() {
       <Route path="/financeiro/relatorio" element={<ProtectedRoute><MonthlyReport /></ProtectedRoute>} />
       <Route path="/financeiro/vacancia" element={<ProtectedRoute><VacancyIndex /></ProtectedRoute>} />
       <Route path="/recibos" element={<ProtectedRoute><Receipts /></ProtectedRoute>} />
+      <Route path="/documentos" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
       <Route path="/condominiums/:id" element={<ProtectedRoute><CondominiumDetail /></ProtectedRoute>} />
       <Route path="/apartments/:id" element={<ProtectedRoute><ApartmentDetail /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
