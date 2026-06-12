@@ -87,6 +87,7 @@ export default function PreviousTenants() {
 
   const [search, setSearch] = useState('');
   const [filterCondo, setFilterCondo] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'devendo' | 'acordo' | 'quitado'>('all');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   // Modal de edição de pagamento
@@ -126,6 +127,10 @@ export default function PreviousTenants() {
     const name = `${pt.first_name} ${pt.last_name}`.toLowerCase();
     if (search && !name.includes(search.toLowerCase()) && !pt.apt?.unit_number.toLowerCase().includes(search.toLowerCase())) return false;
     if (filterCondo !== 'all' && pt.condo?.id !== filterCondo) return false;
+    const hasDebt = pt.totalOwed > 0 || pt.hasActiveAgreement;
+    if (filterStatus === 'devendo'  && !(hasDebt && !pt.hasActiveAgreement)) return false;
+    if (filterStatus === 'acordo'   && !pt.hasActiveAgreement) return false;
+    if (filterStatus === 'quitado'  && hasDebt) return false;
     return true;
   });
 
@@ -247,26 +252,56 @@ export default function PreviousTenants() {
         )}
 
         {/* Filtros */}
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              className="pl-9"
-              placeholder="Buscar por nome ou apartamento..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                className="pl-9"
+                placeholder="Buscar por nome ou apartamento..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+            <Select value={filterCondo} onValueChange={setFilterCondo}>
+              <SelectTrigger className="w-full sm:w-56">
+                <Building2 className="w-4 h-4 mr-2 text-muted-foreground" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os condomínios</SelectItem>
+                {condominiums.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
-          <Select value={filterCondo} onValueChange={setFilterCondo}>
-            <SelectTrigger className="w-full sm:w-56">
-              <Building2 className="w-4 h-4 mr-2 text-muted-foreground" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os condomínios</SelectItem>
-              {condominiums.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+
+          {/* Pills de status */}
+          <div className="flex gap-2 flex-wrap">
+            {([
+              { value: 'all',     label: 'Todos',               count: enriched.length },
+              { value: 'devendo', label: 'Devendo',             count: enriched.filter(pt => (pt.totalOwed > 0 || pt.hasActiveAgreement) && !pt.hasActiveAgreement).length },
+              { value: 'acordo',  label: 'Acordo em andamento', count: enriched.filter(pt => pt.hasActiveAgreement).length },
+              { value: 'quitado', label: 'Quitado',             count: enriched.filter(pt => pt.totalOwed === 0 && !pt.hasActiveAgreement).length },
+            ] as const).map(f => (
+              <button
+                key={f.value}
+                onClick={() => setFilterStatus(f.value)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                  filterStatus === f.value
+                    ? f.value === 'devendo'  ? 'bg-red-100 text-red-700 border-red-300 dark:bg-red-950/40 dark:text-red-400 dark:border-red-800'
+                    : f.value === 'acordo'   ? 'bg-orange-100 text-orange-700 border-orange-300 dark:bg-orange-950/40 dark:text-orange-400 dark:border-orange-800'
+                    : f.value === 'quitado'  ? 'bg-green-100 text-green-700 border-green-300 dark:bg-green-950/40 dark:text-green-400 dark:border-green-800'
+                    : 'bg-primary/10 text-primary border-primary/30'
+                    : 'bg-muted/50 text-muted-foreground border-border hover:border-primary/40 hover:text-foreground'
+                }`}
+              >
+                {f.label}
+                <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                  filterStatus === f.value ? 'bg-white/40 dark:bg-black/20' : 'bg-muted text-muted-foreground'
+                }`}>{f.count}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Lista */}
