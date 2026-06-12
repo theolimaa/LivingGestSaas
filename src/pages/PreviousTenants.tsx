@@ -165,12 +165,15 @@ export default function PreviousTenants() {
       ? Math.max(0, editModal.record.rent_value - debtAmt)
       : paidAmt;
 
+    // Se não pagou nada (0), trata como não pago — sem data, sem método
+    const noPay = effectivePaid === 0;
+
     await upsert.mutateAsync({
       ...editModal.record,
-      paid: true,
-      paid_amount: effectivePaid,
-      payment_date: editModal.date,
-      payment_method: editModal.method,
+      paid: !noPay,
+      paid_amount: noPay ? null : effectivePaid,
+      payment_date: noPay ? null : editModal.date,
+      payment_method: noPay ? null : editModal.method,
     });
     setEditModal(null);
     toast.success('Pagamento atualizado!');
