@@ -279,11 +279,13 @@ export default function Dashboard() {
       .map(ag => previousTenants.find(pt => pt.id === ag.previous_tenant_id)?.original_id)
       .filter(Boolean)
   );
-  const formerUnpaidOwed = enrichedRecords
+  // Ex-inquilinos SEM acordo ativo: usa financialRecords diretamente (enrichedRecords
+  // exclui registros não pagos de contratos encerrados, o que é o caso de todos os ex-inquilinos)
+  const formerUnpaidOwed = financialRecords
     .filter(r => {
       if (r.paid) return false;
       if (!previousTenantIds.has(r.tenant_id ?? '')) return false;
-      if (activeAgreementTenantIds.has(r.tenant_id ?? '')) return false; // skip: has agreement
+      if (activeAgreementTenantIds.has(r.tenant_id ?? '')) return false; // skip: tem acordo ativo
       return r.rent_value > 0;
     })
     .reduce((s, r) => s + r.rent_value, 0);
