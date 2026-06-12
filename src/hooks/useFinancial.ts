@@ -122,7 +122,10 @@ export function useUpsertFinancialRecord() {
   return useMutation({
     mutationFn: async (record: Omit<FinancialRecordDB, 'id' | 'created_at' | 'updated_at'> & { id?: string }) => {
       if (record.id) {
-        const { id, ...updates } = record;
+        const { id, ...rawUpdates } = record;
+        // Remove campos de join (ex: 'apartments') que podem vir do useAllFinancialRecords
+        // e causam erro "Could not find the 'apartments' column" no Supabase
+        const { apartments: _apt, ...updates } = rawUpdates as any;
         const { data, error } = await supabase
           .from('financial_records')
           .update(updates)
@@ -132,7 +135,8 @@ export function useUpsertFinancialRecord() {
         if (error) throw error;
         return data;
       } else {
-        const { id: _id, ...insertData } = record as FinancialRecordDB;
+        const { id: _id, ...rawInsertData } = record as FinancialRecordDB;
+        const { apartments: _apt, ...insertData } = rawInsertData as any;
         const { data, error } = await supabase
           .from('financial_records')
           .insert(insertData)
