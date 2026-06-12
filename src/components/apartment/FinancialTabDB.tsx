@@ -138,11 +138,28 @@ export default function FinancialTabDB({ apartmentId, tenantId, tenantName, tena
   async function confirmPayment() {
     if (!paymentModal) return;
     const paidAmt = parseFloat(paymentModal.paidAmount) || 0;
-    const isPartial = paidAmt < paymentModal.record.rent_value && paidAmt > 0;
+    const obs = paymentModal.observations.trim() || null;
+
+    // Se não pagou nada (0), desmarca o pagamento — sem data, sem método
+    if (paidAmt === 0) {
+      await upsert.mutateAsync({
+        ...paymentModal.record,
+        paid: false,
+        payment_date: null,
+        paid_amount: null,
+        payment_method: null,
+        debt_payment_method: null,
+        observations: obs,
+        status: 'Pendente',
+      });
+      setPaymentModal(null);
+      return;
+    }
+
+    const isPartial = paidAmt < paymentModal.record.rent_value;
     const isAcordo = isPartial && !paymentModal.isDebt;
     // Observações: só o que o usuário digitou — sem texto automático
     // O marcador técnico do acordo fica em debt_payment_method = 'acordo'
-    const obs = paymentModal.observations.trim() || null;
     await upsert.mutateAsync({
       ...paymentModal.record,
       paid: true,
