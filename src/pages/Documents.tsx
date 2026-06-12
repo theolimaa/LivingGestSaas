@@ -279,8 +279,9 @@ export default function Documents() {
               {Object.entries(grouped).slice(0, 2).map(([cId, condo]) => (
                 <div key={cId} className="ml-3 space-y-0.5">
                   <p>📁 {condo.name}</p>
+                  <p className="ml-4">📁 Documentos</p>
                   {Object.entries(condo.apts).slice(0, 1).map(([aId, apt]) => (
-                    <div key={aId} className="ml-4 space-y-0.5">
+                    <div key={aId} className="ml-8 space-y-0.5">
                       <p>📁 Apto {apt.unit}</p>
                       <p className="ml-4">📁 2026 &rsaquo; Junho 2026</p>
                       <p className="ml-8 text-muted-foreground/60">📁 Documentos_NomeInquilino &rsaquo; arquivo.pdf</p>
@@ -458,10 +459,11 @@ export default function Documents() {
               <p className="font-semibold text-foreground">Estrutura criada automaticamente:</p>
               <p>📁 {cfgInput.folderName || 'Condomínios'} ← sua pasta raiz</p>
               <p className="ml-4">📁 Roseno Lopes / 📁 Sítio Córrego / ...</p>
-              <p className="ml-8">📁 980-4 (número do apto)</p>
-              <p className="ml-12">📁 2026 &rsaquo; Junho 2026</p>
-              <p className="ml-16">📁 Documentos_Lucelia_Assis</p>
-              <p className="ml-20">Contrato.pdf</p>
+              <p className="ml-8">📁 Documentos</p>
+              <p className="ml-12">📁 980-4 (número do apto)</p>
+              <p className="ml-16">📁 2026 &rsaquo; Junho 2026</p>
+              <p className="ml-20">📁 Documentos_Lucelia_Assis</p>
+              <p className="ml-24">Contrato.pdf</p>
             </div>
           </div>
           <DialogFooter>
