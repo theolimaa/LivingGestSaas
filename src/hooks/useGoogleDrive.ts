@@ -233,12 +233,13 @@ export function useGoogleDrive() {
       const f = files[i];
       onProgress?.(i, files.length, result.skipped);
       try {
-        // Root > Condo > Apt > Ano > Mês > Documentos_NomeInquilino
-        const condoId    = await cached(`c:${f.condoName}`, f.condoName, config.rootFolderId);
-        const aptId      = await cached(`a:${f.condoName}:${f.aptUnit}`, f.aptUnit, condoId);
-        const yearId     = await cached(`y:${f.condoName}:${f.aptUnit}:${f.year}`, String(f.year), aptId);
-        const monthId    = await cached(`m:${f.condoName}:${f.aptUnit}:${f.year}:${f.monthLabel}`, f.monthLabel, yearId);
-        const docFolder  = `Documentos_${f.tenantName.replace(/\s+/g, '_')}`;
+        // Root > Condo > Documentos > Apt > Ano > Mês > Documentos_NomeInquilino
+        const condoId     = await cached(`c:${f.condoName}`, f.condoName, config.rootFolderId);
+        const docsRootId  = await cached(`dr:${f.condoName}`, 'Documentos', condoId);
+        const aptId       = await cached(`a:${f.condoName}:${f.aptUnit}`, f.aptUnit, docsRootId);
+        const yearId      = await cached(`y:${f.condoName}:${f.aptUnit}:${f.year}`, String(f.year), aptId);
+        const monthId     = await cached(`m:${f.condoName}:${f.aptUnit}:${f.year}:${f.monthLabel}`, f.monthLabel, yearId);
+        const docFolder   = `Documentos_${f.tenantName.replace(/\s+/g, '_')}`;
         const docFolderId = await cached(
           `d:${f.condoName}:${f.aptUnit}:${f.year}:${f.monthLabel}:${f.tenantName}`,
           docFolder,
