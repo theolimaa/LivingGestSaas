@@ -269,6 +269,36 @@ export function useCancelDebtAgreement() {
   });
 }
 
+export function useDeleteDebtAgreement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, previousTenantId }: { id: string; previousTenantId: string }) => {
+      // Apaga primeiro as parcelas (FK constraint)
+      const { error: instError } = await supabase
+        .from('debt_installments')
+        .delete()
+        .eq('agreement_id', id);
+      if (instError) throw instError;
+      const { error } = await supabase
+        .from('debt_agreements')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      return previousTenantId;
+    },
+    onSuccess: (previousTenantId) => {
+      qc.invalidateQueries({ queryKey: ['debt_agreements', previousTenantId] });
+      qc.invalidateQueries({ queryKey: ['debt_agreements_all'] });
+      qc.invalidateQueries({ queryKey: ['debt_installments_all'] });
+      toast.success('Acordo excluído.');
+    },
+    onError: (e: unknown) => {
+      const msg = (e && typeof e === 'object' && 'message' in e) ? (e as any).message : String(e);
+      toast.error(`Erro: ${msg}`);
+    },
+  });
+}
+
 export function useAllDebtAgreements() {
   const { user } = useAuth();
   return useQuery({
