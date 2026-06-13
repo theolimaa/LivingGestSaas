@@ -337,18 +337,6 @@ export default function Dashboard() {
       .map(ag => previousTenants.find(pt => pt.id === ag.previous_tenant_id)?.original_id)
       .filter(Boolean)
   );
-  // Ex-inquilinos SEM acordo ativo: usa financialRecords diretamente (enrichedRecords
-  // exclui registros não pagos de contratos encerrados, o que é o caso de todos os ex-inquilinos)
-  const formerUnpaidOwed = financialRecords
-    .filter(r => {
-      if (r.paid) return false;
-      if (!previousTenantIds.has(r.tenant_id ?? '')) return false;
-      if (activeAgreementTenantIds.has(r.tenant_id ?? '')) return false;  // tem acordo ativo → usa agreementsOwed
-      if (settledAgreementTenantIds.has(r.tenant_id ?? '')) return false; // acordo quitado/cancelado → dívida zerada
-      return r.rent_value > 0;
-    })
-    .reduce((s, r) => s + r.rent_value, 0);
-
   // Linhas sintéticas de acordos ativos para o modal "Ver detalhes" do Devendo
   const agreementModalRows = allDebtAgreements
     .filter(ag => ag.status === 'active')
@@ -376,16 +364,26 @@ export default function Dashboard() {
       } as any];
     });
 
-  // Mesmos registros, mas como objetos completos para o modal "Ver detalhes"
+  // Registros de ex-inquilinos com saldo devedor — sem filtro de data (dívida cumulativa)
+  // Inclui tanto registros não pagos (paid=false) quanto pagos parcialmente (paid=true, calcOwed>0)
+  // Exclui registros já contados em debtRecords (para evitar duplicação)
+  const debtRecordIds = new Set(debtRecords.map(r => r.id));
+
   const formerUnpaidRecordsForModal = financialRecords
     .filter(r => {
-      if (r.paid) return false;
       if (!previousTenantIds.has(r.tenant_id ?? '')) return false;
       if (activeAgreementTenantIds.has(r.tenant_id ?? '')) return false;
       if (settledAgreementTenantIds.has(r.tenant_id ?? '')) return false;
-      return r.rent_value > 0;
+      if (debtRecordIds.has(r.id)) return false; // já em debtRecords — não duplicar
+      const owed = !r.paid ? r.rent_value : calcOwed(r);
+      return owed > 0;
     })
     .map(r => ({ ...r, computedStatus: 'overdue' as const, isFormer: true, dueDateMonth: null, paymentMonth: null }));
+
+  const formerUnpaidOwed = formerUnpaidRecordsForModal.reduce((s, r) => {
+    const owed = !r.paid ? r.rent_value : calcOwed(r);
+    return s + owed;
+  }, 0);
 
   // Saldo restante de acordos de dívida ativos entra no Devendo
   const agreementsOwed = allDebtAgreements
