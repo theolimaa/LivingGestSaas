@@ -110,7 +110,7 @@ export default function PreviousTenants() {
       const records = financialRecords.filter(r => r.tenant_id === pt.original_id);
       const hasActiveAgreement = allAgreements.some(a => a.previous_tenant_id === pt.id && a.status === 'active');
       // Dívida quitada ou cancelada via acordo = R$0 (perdoada ou encerrada)
-      const hasSettledAgreement = allAgreements.some(a => a.previous_tenant_id === pt.id && (a.status === 'settled' || a.status === 'cancelled'));
+      const hasSettledAgreement = allAgreements.some(a => a.previous_tenant_id === pt.id && a.status === 'settled');
       const hasAnyAgreement = allAgreements.some(a => a.previous_tenant_id === pt.id);
       // Ex-inquilino: registros não pagos = dívida total; pagos parciais = saldo devedor
       // Se há acordo quitado/cancelado = dívida considerada zerada
@@ -423,6 +423,7 @@ export default function PreviousTenants() {
                             <thead>
                               <tr className="border-b border-border bg-muted/40">
                                 <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground">Período</th>
+                                <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground hidden sm:table-cell">Tipo</th>
                                 <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground">Valor</th>
                                 <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground">Pago</th>
                                 <th className="text-right px-4 py-2.5 text-xs font-semibold text-muted-foreground">Devendo</th>
@@ -465,6 +466,13 @@ export default function PreviousTenants() {
                                   return (
                                     <tr key={r.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20">
                                       <td className="px-4 py-2.5 text-xs font-medium">{periodLabel}</td>
+                                      <td className="px-4 py-2.5 hidden sm:table-cell">
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                          r.paid && calcOwed(r) > 0
+                                            ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400'
+                                            : 'bg-muted text-muted-foreground'
+                                        }`}>{r.paid && calcOwed(r) > 0 ? 'Parcial' : 'Aluguel'}</span>
+                                      </td>
                                       <td className="px-4 py-2.5 text-right font-semibold">{formatCurrency(r.rent_value)}</td>
                                       <td className="px-4 py-2.5 text-right">
                                         {r.paid
@@ -508,13 +516,27 @@ export default function PreviousTenants() {
                                 })}
                             </tbody>
                             <tfoot>
+                              {pt.contract?.caution_paid && pt.contract.caution_date && (pt.contract.caution_value ?? 0) > 0 && (
+                                <tr className="bg-blue-50/40 dark:bg-blue-950/10 border-t border-blue-200/50">
+                                  <td className="px-4 py-2 text-xs font-medium text-blue-700 dark:text-blue-400">Caução</td>
+                                  <td className="px-4 py-2 hidden sm:table-cell">
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400">Caução</span>
+                                  </td>
+                                  <td className="px-4 py-2 text-right font-semibold">{formatCurrency(pt.contract.caution_value ?? 0)}</td>
+                                  <td className="px-4 py-2 text-right" style={{ color: 'hsl(var(--paid))' }}>{formatCurrency(pt.contract.caution_value ?? 0)}</td>
+                                  <td className="px-4 py-2 text-right text-muted-foreground">—</td>
+                                  <td className="px-4 py-2 text-center text-xs text-muted-foreground">{pt.contract.caution_date}</td>
+                                  <td />
+                                </tr>
+                              )}
                               <tr className="bg-muted/30">
                                 <td className="px-4 py-2 text-xs font-semibold text-muted-foreground">Total</td>
+                                <td className="px-4 py-2 hidden sm:table-cell" />
                                 <td className="px-4 py-2 text-right font-bold text-sm">
                                   {formatCurrency(pt.records.reduce((s, r) => s + r.rent_value, 0))}
                                 </td>
                                 <td className="px-4 py-2 text-right font-bold text-sm" style={{ color: 'hsl(var(--paid))' }}>
-                                  {formatCurrency(pt.totalReceived)}
+                                  {formatCurrency(pt.totalReceived + (pt.contract?.caution_paid ? (pt.contract.caution_value ?? 0) : 0))}
                                 </td>
                                 <td className="px-4 py-2 text-right font-bold text-sm text-destructive">
                                   {pt.totalOwed > 0 ? formatCurrency(pt.totalOwed) : '—'}
