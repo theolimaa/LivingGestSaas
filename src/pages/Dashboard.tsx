@@ -375,6 +375,9 @@ export default function Dashboard() {
         _type: 'agreement',
       } as any];
     });
+
+  // Mesmos registros, mas como objetos completos para o modal "Ver detalhes"
+  const formerUnpaidRecordsForModal = financialRecords
     .filter(r => {
       if (r.paid) return false;
       if (!previousTenantIds.has(r.tenant_id ?? '')) return false;
