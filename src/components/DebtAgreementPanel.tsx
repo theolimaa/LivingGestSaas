@@ -17,6 +17,7 @@ import {
   useDebtAgreements, useDebtInstallments,
   useCreateDebtAgreement, useUpdateDebtAgreement,
   usePayInstallment, useUnpayInstallment, useCancelDebtAgreement,
+  useDeleteDebtAgreement,
   DebtAgreement,
 } from '@/hooks/useDebtAgreements';
 
@@ -151,6 +152,7 @@ function AgreementCard({
   const { data: installments = [] } = useDebtInstallments(agreement.id);
   const updateAgreement = useUpdateDebtAgreement();
   const cancelAgreement = useCancelDebtAgreement();
+  const deleteAgreement = useDeleteDebtAgreement();
   const { user } = useAuth();
   const adminName = user?.user_metadata?.username || user?.email?.split('@')[0] || 'Administrador';
   const [expanded, setExpanded] = useState(true);
@@ -242,15 +244,18 @@ function AgreementCard({
             ))}
           </div>
 
-          {/* Actions — Editar e Doc. Acordo sempre visíveis; Quitar/Cancelar só quando ativo */}
+          {/* Actions — Editar e Doc. Acordo sempre visíveis; Quitar/Cancelar só quando ativo; Excluir/Reativar quando cancelado */}
           <div className="flex gap-2 pt-1 flex-wrap">
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => {
-              setEditNotes(agreement.notes ?? '');
-              setEditAgreedAmount(String(agreement.agreed_amount));
-              setEditModal(true);
-            }}>
-              <Pencil className="w-3 h-3" /> Editar
-            </Button>
+            {/* Editar: apenas acordos ativos */}
+            {agreement.status === 'active' && (
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => {
+                setEditNotes(agreement.notes ?? '');
+                setEditAgreedAmount(String(agreement.agreed_amount));
+                setEditModal(true);
+              }}>
+                <Pencil className="w-3 h-3" /> Editar
+              </Button>
+            )}
             {agreement.status === 'active' && (<>
               <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-green-600 hover:text-green-700"
                 onClick={() => updateAgreement.mutate({ id: agreement.id, previousTenantId, status: 'settled' })}>
@@ -261,6 +266,24 @@ function AgreementCard({
                 <XCircle className="w-3 h-3" /> Cancelar
               </Button>
             </>)}
+            {/* Reativar: apenas acordos cancelados */}
+            {agreement.status === 'cancelled' && (
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-amber-600 hover:text-amber-700"
+                onClick={() => updateAgreement.mutate({ id: agreement.id, previousTenantId, status: 'active' })}>
+                <RotateCcw className="w-3 h-3" /> Reativar
+              </Button>
+            )}
+            {/* Excluir: apenas acordos cancelados ou quitados */}
+            {(agreement.status === 'cancelled' || agreement.status === 'settled') && (
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-destructive hover:text-destructive"
+                onClick={() => {
+                  if (!window.confirm('Excluir este acordo e todas as suas parcelas? Essa ação não pode ser desfeita.')) return;
+                  deleteAgreement.mutate({ id: agreement.id, previousTenantId });
+                }}
+                disabled={deleteAgreement.isPending}>
+                <Trash2 className="w-3 h-3" /> Excluir
+              </Button>
+            )}
             <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-primary hover:text-primary"
               onClick={() => downloadReceipt()}>
               <FileText className="w-3 h-3" /> Doc. Acordo
