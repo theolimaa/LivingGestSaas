@@ -70,6 +70,14 @@ function CondominiumModal({ open, onClose, initial }: { open: boolean; onClose: 
   );
 }
  
+function getDescription(r: any): string {
+  if (r._type === 'caution' || r.status === 'Caução') return 'Caução';
+  if (r.status === 'Acordo' || r.observations?.startsWith('Parcela')) return 'Acordo';
+  if (!r.paid) return 'Aluguel';
+  if (calcOwed(r) > 0) return 'Parcial';
+  return 'Aluguel';
+}
+
 type ModalSortField = 'condo' | 'apt' | 'date';
 type ModalSortDir = 'asc' | 'desc';
  
@@ -145,6 +153,7 @@ function DetailModal({ open, onClose, title, records, tenants, apartments, condo
                     </button>
                   </th>
                   <th className="text-left px-3 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wide">Inquilino</th>
+                  <th className="text-left px-3 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wide hidden md:table-cell">Tipo</th>
                   <th className="text-right px-3 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wide">Valor</th>
                   <th className="text-center px-3 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wide">
                     <button className="inline-flex items-center gap-1" onClick={() => toggleSort('date')}>
@@ -167,6 +176,14 @@ function DetailModal({ open, onClose, title, records, tenants, apartments, condo
                             <History className="w-2.5 h-2.5" /> anterior
                           </Link>
                         )}
+                      </td>
+                      <td className="px-3 py-2.5 text-sm hidden md:table-cell">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                          getDescription(r) === 'Caução'  ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400' :
+                          getDescription(r) === 'Acordo'  ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400' :
+                          getDescription(r) === 'Parcial' ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400' :
+                          'bg-muted text-muted-foreground'
+                        }`}>{getDescription(r)}</span>
                       </td>
                       <td className="px-3 py-2.5 text-right font-semibold text-sm">{formatCurrency(variant === 'received' ? calcReceived(r) : variant === 'debt' ? (!r.paid ? r.rent_value : calcOwed(r)) : r.rent_value)}</td>
                       <td className="px-3 py-2.5 text-center text-xs text-muted-foreground">{r.dateCol}</td>
@@ -255,6 +272,38 @@ export default function Dashboard() {
   });
  
   const totalReceived = receivedRecords.reduce((s, r) => s + calcReceived(r), 0);
+
+  // Cauções pagas no período selecionado — contam como receita
+  const cautionRows = contracts
+    .filter(c => {
+      if (!c.caution_paid || !c.caution_date || !(c.caution_value > 0)) return false;
+      const pm = c.caution_date.substring(0, 7);
+      if (selectedMonthKey) return pm === selectedMonthKey;
+      return pm.startsWith(String(selectedYear));
+    })
+    .flatMap(c => {
+      const tenant = allTenants.find(t => t.id === c.tenant_id);
+      const aptId = tenant?.apartment_id ?? '';
+      if (!aptId) return [];
+      return [{
+        id: `caution_${c.id}`,
+        apartment_id: aptId,
+        tenant_id: c.tenant_id ?? '',
+        contract_id: c.id,
+        month: c.caution_date!.substring(0, 7),
+        rent_value: c.caution_value,
+        paid: true,
+        paid_amount: c.caution_value,
+        payment_date: c.caution_date!,
+        payment_method: null,
+        debt_paid_amount: null, debt_payment_date: null, debt_payment_method: null,
+        status: 'Caução', observations: null, receipt_number: null, receipt_generated_at: null,
+        created_at: null, updated_at: null,
+        computedStatus: 'paid', paymentMonth: c.caution_date!.substring(0, 7), dueDateMonth: null,
+        _type: 'caution',
+      } as any];
+    });
+  const totalCautionReceived = cautionRows.reduce((s: number, r: any) => s + r.rent_value, 0);
   const totalPending = pendingRecords.reduce((s, r) => s + r.rent_value, 0);
   const totalOverdue = overdueRecords.reduce((s, r) => s + r.rent_value, 0);
  
@@ -300,8 +349,32 @@ export default function Dashboard() {
     })
     .reduce((s, r) => s + r.rent_value, 0);
 
-  // Mesmos registros, mas como objetos completos para o modal "Ver detalhes"
-  const formerUnpaidRecordsForModal = financialRecords
+  // Linhas sintéticas de acordos ativos para o modal "Ver detalhes" do Devendo
+  const agreementModalRows = allDebtAgreements
+    .filter(ag => ag.status === 'active')
+    .flatMap(ag => {
+      const prevTenant = previousTenants.find((pt: any) => pt.id === ag.previous_tenant_id);
+      if (!prevTenant) return [];
+      const paidSoFar = debtInstallments
+        .filter((i: any) => i.agreement_id === ag.id && i.paid)
+        .reduce((s: number, i: any) => s + i.amount, 0);
+      const remaining = Math.max(0, ag.agreed_amount - paidSoFar);
+      if (remaining <= 0) return [];
+      return [{
+        id: `agreement_${ag.id}`,
+        apartment_id: ag.apartment_id,
+        tenant_id: (prevTenant as any).original_id ?? '',
+        contract_id: null,
+        month: new Date().toISOString().substring(0, 7),
+        rent_value: remaining,
+        paid: false, paid_amount: null, payment_date: null, payment_method: null,
+        debt_paid_amount: null, debt_payment_date: null, debt_payment_method: null,
+        status: 'Acordo', observations: null,
+        receipt_number: null, receipt_generated_at: null, created_at: null, updated_at: null,
+        computedStatus: 'overdue', paymentMonth: null, dueDateMonth: null, isFormer: true,
+        _type: 'agreement',
+      } as any];
+    });
     .filter(r => {
       if (r.paid) return false;
       if (!previousTenantIds.has(r.tenant_id ?? '')) return false;
@@ -498,7 +571,7 @@ export default function Dashboard() {
               </div>
             </div>
             <p className="text-xl md:text-2xl font-bold relative z-10" style={{ color: 'hsl(var(--paid))' }}>
-              {formatCurrency(totalReceived)}
+              {formatCurrency(totalReceived + totalCautionReceived)}
             </p>
             <p className="text-xs text-muted-foreground mt-1.5 relative z-10 flex items-center gap-1">
               Ver detalhes <ChevronRight className="w-3 h-3" />
@@ -822,7 +895,7 @@ export default function Dashboard() {
         open={debtModal}
         onClose={() => setDebtModal(false)}
         title={`Devendo — ${filterLabel} ${selectedYear}`}
-        records={[...debtRecords, ...formerUnpaidRecordsForModal]}
+        records={[...debtRecords, ...formerUnpaidRecordsForModal, ...agreementModalRows]}
         tenants={[
           ...allTenants,
           ...previousTenants.map(pt => ({ id: pt.original_id ?? '', first_name: pt.first_name, last_name: pt.last_name })),
@@ -857,7 +930,7 @@ export default function Dashboard() {
  
       <DetailModal open={pendingModal} onClose={() => setPendingModal(false)} title={`A Receber — ${filterLabel} ${selectedYear}`} records={[...pendingRecords, ...pendingInstallmentRows]} tenants={[...allTenants, ...previousTenants.map(pt => ({ id: pt.original_id ?? '', first_name: pt.first_name, last_name: pt.last_name }))]} apartments={apartments} condominiums={condominiums} variant="pending" />
       <DetailModal open={overdueModal} onClose={() => setOverdueModal(false)} title={`Inadimplentes — ${filterLabel} ${selectedYear}`} records={overdueRecords} tenants={allTenants} apartments={apartments} condominiums={condominiums} variant="overdue" />
-      <DetailModal open={receivedModal} onClose={() => setReceivedModal(false)} title={`Receita Recebida — ${filterLabel} ${selectedYear}`} records={receivedRecords} tenants={allTenants} apartments={apartments} condominiums={condominiums} variant="received" />
+      <DetailModal open={receivedModal} onClose={() => setReceivedModal(false)} title={`Receita Recebida — ${filterLabel} ${selectedYear}`} records={[...receivedRecords, ...cautionRows]} tenants={allTenants} apartments={apartments} condominiums={condominiums} variant="received" />
     </Layout>
   );
 }
