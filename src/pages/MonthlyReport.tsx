@@ -3,7 +3,7 @@ import { Download, FileBarChart2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import Layout from '@/components/Layout';
-import { formatCurrency, MONTHS, YEARS, getPeriodAndDueDate, getRecordStatus } from '@/lib/utils-app';
+import { formatCurrency, MONTHS, YEARS, getPeriodAndDueDate, computeRecordStatus, getRecordDueDate } from '@/lib/utils-app';
 import { useCondominiums } from '@/hooks/useCondominiums';
 import { useApartments } from '@/hooks/useApartments';
 import { useTenants } from '@/hooks/useTenants';
@@ -11,25 +11,6 @@ import { useFinancialRecordsByYear, FinancialRecordDB, calcReceived, calcOwed } 
 import { useContracts } from '@/hooks/useContracts';
 import jsPDF from 'jspdf';
 
-// ─── Classifica o status ───────────────────────────────────────────────────────
-function computeStatus(
-  record: FinancialRecordDB,
-  paymentDay?: number | null,
-  contractStartDate?: string | null
-): 'paid' | 'overdue' | 'pending' {
-  if (record.paid) return 'paid';
-  return getRecordStatus(record.month, paymentDay, contractStartDate);
-}
-
-// ─── Retorna YYYY-MM-DD do vencimento ──────────────────────────────────────────
-function getDueDate(
-  month: string,
-  contractStartDate: string | null | undefined,
-  paymentDay: number | null | undefined
-): string {
-  const { dueDateStr } = getPeriodAndDueDate(month, contractStartDate ?? null, paymentDay ?? 1);
-  return dueDateStr;
-}
 
 export default function MonthlyReport() {
   const currentYear = new Date().getFullYear();
@@ -50,8 +31,8 @@ export default function MonthlyReport() {
   const enriched = financialRecords.map(r => {
     const apt = apartments.find(a => a.id === r.apartment_id);
     const contract = contracts.find(c => c.id === r.contract_id);
-    const dueDate = getDueDate(r.month, contract?.start_date, contract?.payment_day);
-    const status = computeStatus(r, contract?.payment_day, contract?.start_date);
+    const dueDate = getRecordDueDate(r.month, contract?.start_date, contract?.payment_day);
+    const status = computeRecordStatus(r.paid, r.month, contract?.payment_day, contract?.start_date);
     return { ...r, apt, contract, dueDate, computedStatus: status };
   });
 
@@ -241,7 +222,7 @@ export default function MonthlyReport() {
         </div>
 
         {/* Resumo */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="stat-card">
             <p className="text-sm font-semibold text-foreground relative z-10">Recebido</p>
             <p className="text-2xl font-bold relative z-10" style={{ color: 'hsl(var(--paid))' }}>{formatCurrency(grandPaid)}</p>
@@ -256,6 +237,11 @@ export default function MonthlyReport() {
             <p className="text-sm font-semibold text-foreground relative z-10">Inadimplente</p>
             <p className="text-2xl font-bold relative z-10" style={{ color: 'hsl(var(--overdue))' }}>{formatCurrency(grandOverdue)}</p>
             <p className="text-xs text-muted-foreground mt-0.5 relative z-10">Venceu e não pagou</p>
+          </div>
+          <div className="stat-card">
+            <p className="text-sm font-semibold text-foreground relative z-10">Devendo</p>
+            <p className="text-2xl font-bold relative z-10" style={{ color: grandOwed > 0 ? 'hsl(var(--warning))' : 'hsl(var(--paid))' }}>{formatCurrency(grandOwed)}</p>
+            <p className="text-xs text-muted-foreground mt-0.5 relative z-10">Saldo devedor dos pagos</p>
           </div>
         </div>
 

@@ -161,8 +161,8 @@ export default function Receipts() {
       if (!r.contract?.start_date) continue;
       const contractMonth = r.contract.start_date.substring(0, 7);
       // Só inclui se o contrato foi criado no mês filtrado
-      if (selectedMonthKey && contractMonth !== selectedMonthKey) continue;
-      if (!selectedMonthKey && !contractMonth.startsWith(String(selectedYear))) continue;
+      if (monthKey && contractMonth !== monthKey) continue;
+      if (!monthKey && !contractMonth.startsWith(String(selectedYear))) continue;
       try {
         const doc = new jsPDF({ unit: 'mm', format: 'a4' });
         const ml = 20; let y = 20;
@@ -200,8 +200,8 @@ export default function Receipts() {
     for (const inst of allDebtInstallments) {
       if (!inst.paid || !inst.payment_date) continue;
       const instMonth = inst.payment_date.substring(0, 7);
-      if (selectedMonthKey && instMonth !== selectedMonthKey) continue;
-      if (!selectedMonthKey && !instMonth.startsWith(String(selectedYear))) continue;
+      if (monthKey && instMonth !== monthKey) continue;
+      if (!monthKey && !instMonth.startsWith(String(selectedYear))) continue;
       try {
         const ag = allDebtAgreements.find((a: any) => a.id === inst.agreement_id);
         if (!ag) continue;

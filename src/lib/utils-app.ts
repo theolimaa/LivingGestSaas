@@ -99,3 +99,22 @@ export function getRecordStatus(
   today.setHours(0, 0, 0, 0);
   return today > dueDate ? 'overdue' : 'pending';
 }
+
+export function computeRecordStatus(
+  paid: boolean | null,
+  month: string,
+  paymentDay?: number | null,
+  contractStartDate?: string | null
+): 'paid' | 'overdue' | 'pending' {
+  if (paid) return 'paid';
+  return getRecordStatus(month, paymentDay, contractStartDate);
+}
+
+export function getRecordDueDate(
+  month: string,
+  contractStartDate: string | null | undefined,
+  paymentDay: number | null | undefined
+): string {
+  const { dueDateStr } = getPeriodAndDueDate(month, contractStartDate ?? null, paymentDay ?? 1);
+  return dueDateStr;
+}

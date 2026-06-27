@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { formatCurrency, MONTHS, YEARS, getPeriodAndDueDate, getRecordStatus } from '@/lib/utils-app';
+import { formatCurrency, MONTHS, YEARS, getPeriodAndDueDate, computeRecordStatus, getRecordDueDate } from '@/lib/utils-app';
 import Layout from '@/components/Layout';
 import { useCondominiums } from '@/hooks/useCondominiums';
 import { useApartments } from '@/hooks/useApartments';
@@ -25,25 +25,7 @@ import { useAllDebtAgreements, useAllDebtInstallments } from '@/hooks/useDebtAgr
 import ReceiptModalDB from '@/components/apartment/ReceiptModalDB';
  
 type PaymentMethod = 'pix' | 'especie';
- 
-function computeStatus(
-  record: FinancialRecordDB,
-  paymentDay?: number | null,
-  contractStartDate?: string | null
-): 'paid' | 'overdue' | 'pending' {
-  if (record.paid) return 'paid';
-  return getRecordStatus(record.month, paymentDay, contractStartDate);
-}
- 
-function getDueDate(
-  month: string,
-  contractStartDate: string | null | undefined,
-  paymentDay: number | null | undefined
-): string {
-  const { dueDateStr } = getPeriodAndDueDate(month, contractStartDate ?? null, paymentDay ?? 1);
-  return dueDateStr;
-}
- 
+
 type SortField = 'condo' | 'apt' | 'tenant' | 'period' | 'status' | 'payment_date';
 type SortDir = 'asc' | 'desc';
  
@@ -83,8 +65,8 @@ export default function Financial() {
     const condo = apt ? condominiums.find(c => c.id === apt.condominium_id) : null;
     const tenant = allTenants.find(t => t.id === r.tenant_id);
     const contract = contracts.find(c => c.id === r.contract_id);
-    const status = computeStatus(r, contract?.payment_day, contract?.start_date);
-    const dueDate = getDueDate(r.month, contract?.start_date, contract?.payment_day);
+    const status = computeRecordStatus(r.paid, r.month, contract?.payment_day, contract?.start_date);
+    const dueDate = getRecordDueDate(r.month, contract?.start_date, contract?.payment_day);
     return { ...r, apt, condo, tenant, contract, computedStatus: status, dueDate };
   });
  
@@ -253,10 +235,10 @@ export default function Financial() {
             <p className="text-xs text-muted-foreground mt-1.5 relative z-10">Venceu e não pagou</p>
           </div>
  
-          <div className="stat-card stat-card-danger">
+          <div className="stat-card stat-card-warning">
             <div className="flex items-center justify-between mb-3 relative z-10">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Devendo</p>
-              <div className="icon-badge icon-badge-danger">
+              <div className="icon-badge icon-badge-warning">
                 <AlertTriangle className="w-4 h-4" />
               </div>
             </div>
@@ -357,15 +339,19 @@ export default function Financial() {
                           : '—'}
                       </td>
                       <td className="px-3 py-3 text-center">
-                        <button
-                          onClick={() => r.paid ? unmarkPaid(r) : openPaymentModal(r)}
-                          className="cursor-pointer"
-                          title={r.paid ? 'Desmarcar pagamento' : 'Registrar pagamento'}
-                        >
-                          {r.computedStatus === 'paid' && <span className="badge-paid"><CheckCircle className="w-3 h-3" />Pago</span>}
-                          {r.computedStatus === 'pending' && <span className="badge-unpaid">A Receber</span>}
-                          {r.computedStatus === 'overdue' && <span className="badge-overdue"><AlertCircle className="w-3 h-3" />Inadimplente</span>}
-                        </button>
+                        {r.computedStatus === 'paid'
+                          ? <span className="badge-paid"><CheckCircle className="w-3 h-3" />Pago</span>
+                          : (
+                            <button
+                              onClick={() => openPaymentModal(r)}
+                              className="cursor-pointer"
+                              title="Registrar pagamento"
+                            >
+                              {r.computedStatus === 'pending' && <span className="badge-unpaid">A Receber</span>}
+                              {r.computedStatus === 'overdue' && <span className="badge-overdue"><AlertCircle className="w-3 h-3" />Inadimplente</span>}
+                            </button>
+                          )
+                        }
                       </td>
                       <td className="px-3 py-3 text-center text-xs text-muted-foreground hidden md:table-cell">
                         {r.payment_date ?? '—'}
