@@ -16,7 +16,11 @@ export function useApartments(condominiumId?: string) {
   return useQuery({
     queryKey: ['apartments', condominiumId],
     queryFn: async () => {
-      let query = supabase.from('apartments').select('*').order('unit_number');
+      let query = supabase
+        .from('apartments')
+        .select('*, condominiums!inner(user_id)')
+        .eq('condominiums.user_id', user!.id)
+        .order('unit_number');
       if (condominiumId) query = query.eq('condominium_id', condominiumId);
       const { data, error } = await query;
       if (error) throw error;
@@ -34,8 +38,9 @@ export function useApartment(id: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('apartments')
-        .select('*')
+        .select('*, condominiums!inner(user_id)')
         .eq('id', id)
+        .eq('condominiums.user_id', user!.id)
         .single();
       if (error) throw error;
       return data as ApartmentDB;
