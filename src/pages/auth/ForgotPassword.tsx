@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Building2, ArrowLeft, CheckCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,10 +31,8 @@ export default function ForgotPassword() {
       <div className="w-full max-w-sm">
         <div className="bg-card rounded-2xl shadow-2xl p-8">
           <div className="flex items-center gap-2 mb-6">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Building2 className="w-4 h-4 text-primary-foreground" />
-            </div>
-            <span className="font-bold text-primary">ImóvelGest</span>
+            <img src="/logo.png" alt="Living Gest" className="w-8 h-8 rounded-lg" />
+            <span className="font-bold text-primary">Living Gest</span>
           </div>
 
           {sent ? (

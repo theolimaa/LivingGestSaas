@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Home } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -35,9 +35,7 @@ export default function Login() {
       {/* Left panel */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-center p-12">
         <div className="flex items-center gap-3 mb-12">
-          <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-primary">
-            <Home className="w-6 h-6 text-primary-foreground" />
-          </div>
+          <img src="/logo.png" alt="Living Gest" className="w-11 h-11 rounded-xl" />
           <span className="text-2xl font-bold text-white tracking-tight">Living Gest</span>
         </div>
         <div>
@@ -56,7 +54,7 @@ export default function Login() {
           <div className="bg-card rounded-2xl shadow-2xl p-8">
             <div className="mb-8">
               <div className="flex items-center gap-2 mb-1 lg:hidden">
-                <Home className="w-5 h-5 text-primary" />
+                <img src="/logo.png" alt="Living Gest" className="w-5 h-5 rounded" />
                 <span className="font-bold text-primary">Living Gest</span>
               </div>
               <h2 className="text-2xl font-bold">Bem-vindo de volta</h2>

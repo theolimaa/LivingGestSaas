@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Building2, Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -35,10 +35,8 @@ export default function Register() {
       <div className="w-full max-w-md">
         <div className="bg-card rounded-2xl shadow-2xl p-8">
           <div className="flex items-center gap-2 mb-6">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Building2 className="w-4 h-4 text-primary-foreground" />
-            </div>
-            <span className="font-bold text-primary">ImóvelGest</span>
+            <img src="/logo.png" alt="Living Gest" className="w-8 h-8 rounded-lg" />
+            <span className="font-bold text-primary">Living Gest</span>
           </div>
           <h2 className="text-2xl font-bold mb-1">Criar conta</h2>
           <p className="text-muted-foreground text-sm mb-6">Comece a gerenciar seus imóveis hoje</p>
