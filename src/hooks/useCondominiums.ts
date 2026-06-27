@@ -19,6 +19,7 @@ export function useCondominiums() {
       const { data, error } = await supabase
         .from('condominiums')
         .select('*')
+        .eq('user_id', user!.id)
         .order('created_at', { ascending: true });
       if (error) throw error;
       return data as CondominiumDB[];
@@ -51,13 +52,15 @@ export function useAddCondominium() {
 
 export function useUpdateCondominium() {
   const qc = useQueryClient();
+  const { user } = useAuth();
 
   return useMutation({
     mutationFn: async ({ id, name }: { id: string; name: string }) => {
       const { error } = await supabase
         .from('condominiums')
         .update({ name })
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_id', user!.id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -70,10 +73,11 @@ export function useUpdateCondominium() {
 
 export function useDeleteCondominium() {
   const qc = useQueryClient();
+  const { user } = useAuth();
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('condominiums').delete().eq('id', id);
+      const { error } = await supabase.from('condominiums').delete().eq('id', id).eq('user_id', user!.id);
       if (error) throw error;
     },
     onSuccess: () => {
