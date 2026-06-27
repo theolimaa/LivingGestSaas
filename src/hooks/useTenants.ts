@@ -37,7 +37,7 @@ export function useTenants(apartmentId?: string) {
       let query = supabase
         .from('tenants')
         .select('*, apartments!inner(condominiums!inner(user_id))')
-        .eq('condominiums.user_id', user!.id)
+        .eq('apartments.condominiums.user_id', user!.id)
         .is('archived_at', null)
         .order('created_at', { ascending: false });
       if (apartmentId) query = query.eq('apartment_id', apartmentId);
@@ -229,7 +229,7 @@ export function useAllPreviousTenants() {
       const { data, error } = await supabase
         .from('previous_tenants')
         .select('*, apartments!inner(condominiums!inner(user_id))')
-        .eq('condominiums.user_id', user!.id)
+        .eq('apartments.condominiums.user_id', user!.id)
         .order('archived_at', { ascending: false });
       if (error) throw error;
       return data;

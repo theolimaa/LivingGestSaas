@@ -243,7 +243,7 @@ export function useBulkSaveReceipts() {
       const { data: allRec } = await supabase
         .from('financial_records')
         .select('*, apartments!inner(condominiums!inner(user_id))')
-        .eq('condominiums.user_id', user!.id)
+        .eq('apartments.condominiums.user_id', user!.id)
         .order('month', { ascending: true })
         .limit(50000);
 

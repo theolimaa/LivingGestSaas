@@ -48,7 +48,7 @@ export function useContracts() {
       const { data, error } = await supabase
         .from('contracts')
         .select('*, tenants!inner(apartments!inner(condominiums!inner(user_id)))')
-        .eq('condominiums.user_id', user!.id)
+        .eq('tenants.apartments.condominiums.user_id', user!.id)
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data as ContractDB[];
