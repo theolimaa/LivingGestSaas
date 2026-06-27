@@ -13,7 +13,6 @@ import {
   ChevronDown,
   ChevronUp,
   FileText,
-  Building2,
   History,
   Files,
 } from 'lucide-react';
@@ -102,12 +101,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           className="flex items-center gap-3 px-4 py-4 shrink-0"
           style={{ borderBottom: '1px solid hsl(var(--sidebar-border))' }}
         >
-          <div
-            className="sidebar-logo-gradient flex items-center justify-center w-8 h-8 rounded-lg shrink-0"
+          <img
+            src="/logo.png"
+            alt="Living Gest"
+            className="w-8 h-8 rounded-lg shrink-0"
             style={{ boxShadow: '0 2px 8px hsl(217 91% 55% / 0.35)' }}
-          >
-            <Building2 className="w-4 h-4 text-white" />
-          </div>
+          />
           <div
             className="overflow-hidden transition-all duration-300"
             style={{
@@ -336,12 +335,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <Menu className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2.5">
-            <div
-              className="sidebar-logo-gradient w-7 h-7 rounded-lg flex items-center justify-center"
+            <img
+              src="/logo.png"
+              alt="Living Gest"
+              className="w-7 h-7 rounded-lg shrink-0"
               style={{ boxShadow: '0 2px 8px hsl(217 91% 55% / 0.3)' }}
-            >
-              <Building2 className="w-3.5 h-3.5 text-white" />
-            </div>
+            />
             <span
               className="font-bold text-sm"
               style={{ color: 'hsl(218 22% 92%)' }}
