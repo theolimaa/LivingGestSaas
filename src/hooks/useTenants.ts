@@ -228,8 +228,7 @@ export function useAllPreviousTenants() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('previous_tenants')
-        .select('*, apartments!inner(condominiums!inner(user_id))')
-        .eq('apartments.condominiums.user_id', user!.id)
+        .select('*')
         .order('archived_at', { ascending: false });
       if (error) throw error;
       return data;
