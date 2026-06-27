@@ -306,8 +306,7 @@ export function useAllDebtAgreements() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('debt_agreements')
-        .select('*, apartments!inner(condominiums!inner(user_id))')
-        .eq('condominiums.user_id', user!.id)
+        .select('*')
         .order('created_at', { ascending: false });
       if (error) { console.warn('debt_agreements table:', error.message); return [] as DebtAgreement[]; }
       return data as DebtAgreement[];
@@ -323,8 +322,7 @@ export function useAllDebtInstallments() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('debt_installments')
-        .select('*, debt_agreements!inner(previous_tenant_id, apartment_id, apartments!inner(condominiums!inner(user_id)))')
-        .eq('condominiums.user_id', user!.id)
+        .select('*, debt_agreements(previous_tenant_id, apartment_id)')
         .order('payment_date', { ascending: false });
       if (error) { console.warn('debt_installments table:', error.message); return [] as any[]; }
       return data as (DebtInstallment & { debt_agreements: { previous_tenant_id: string; apartment_id: string } })[];

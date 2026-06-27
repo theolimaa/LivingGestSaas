@@ -89,7 +89,6 @@ export function useAllFinancialRecords() {
       const { data, error } = await supabase
         .from('financial_records')
         .select('*, apartments!inner(condominium_id, condominiums!inner(user_id))')
-        .eq('condominiums.user_id', user!.id)
         .order('month', { ascending: true })
         .limit(50000);
       if (error) throw error;
@@ -106,8 +105,7 @@ export function useFinancialRecordsByYear(year: number) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('financial_records')
-        .select('*, apartments!inner(condominiums!inner(user_id))')
-        .eq('condominiums.user_id', user!.id)
+        .select('*')
         .gte('month', `${year}-01`)
         .lte('month', `${year}-12`)
         .order('month', { ascending: true })

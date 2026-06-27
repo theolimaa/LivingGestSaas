@@ -81,8 +81,7 @@ export function useAllDocuments() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('documents')
-        .select('*, tenants!inner(apartments!inner(condominiums!inner(user_id)))')
-        .eq('condominiums.user_id', user!.id)
+        .select('*')
         .order('uploaded_at', { ascending: false });
       if (error) throw error;
       return data as DocumentDB[];

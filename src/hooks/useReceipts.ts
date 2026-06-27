@@ -239,11 +239,10 @@ export function useBulkSaveReceipts() {
       if (error) throw new Error(error.message);
       if (!paidRaw?.length) return { saved: 0, skipped: 0 };
 
-      // 2. Busca registros financeiros do usuário para montar o histórico anual
+      // 2. Busca TODOS os registros financeiros para montar o histórico anual
       const { data: allRec } = await supabase
         .from('financial_records')
-        .select('*, apartments!inner(condominiums!inner(user_id))')
-        .eq('condominiums.user_id', user!.id)
+        .select('*')
         .order('month', { ascending: true })
         .limit(50000);
 
