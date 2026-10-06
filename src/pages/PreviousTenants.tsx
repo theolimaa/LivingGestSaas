@@ -87,7 +87,7 @@ export default function PreviousTenants() {
 
   const [search, setSearch] = useState('');
   const [filterCondo, setFilterCondo] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'devendo' | 'acordo' | 'quitado'>('all');
+  const [filterStatus, setFilterStatus] = useState<'aberto' | 'devendo' | 'acordo' | 'quitado' | 'all'>('aberto');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   // Modal de edição de pagamento
@@ -128,10 +128,15 @@ export default function PreviousTenants() {
     if (search && !name.includes(search.toLowerCase()) && !pt.apt?.unit_number.toLowerCase().includes(search.toLowerCase())) return false;
     if (filterCondo !== 'all' && pt.condo?.id !== filterCondo) return false;
     const hasDebt = pt.totalOwed > 0 || pt.hasActiveAgreement;
+    if (filterStatus === 'aberto'   && !hasDebt) return false;
     if (filterStatus === 'devendo'  && !(hasDebt && !pt.hasActiveAgreement)) return false;
     if (filterStatus === 'acordo'   && !pt.hasActiveAgreement) return false;
     if (filterStatus === 'quitado'  && hasDebt) return false;
     return true;
+  }).sort((a, b) => {
+    // Acordos em andamento primeiro, depois devendo, depois quitados
+    const rank = (pt: typeof a) => pt.hasActiveAgreement ? 0 : pt.totalOwed > 0 ? 1 : 2;
+    return rank(a) - rank(b);
   });
 
   // Saldo real de parcelas não pagas de acordos ativos
@@ -280,10 +285,11 @@ export default function PreviousTenants() {
           {/* Pills de status */}
           <div className="flex gap-2 flex-wrap">
             {([
-              { value: 'all',     label: 'Todos',               count: enriched.length },
-              { value: 'devendo', label: 'Devendo',             count: enriched.filter(pt => (pt.totalOwed > 0 || pt.hasActiveAgreement) && !pt.hasActiveAgreement).length },
+              { value: 'aberto',  label: 'Em aberto',           count: enriched.filter(pt => pt.totalOwed > 0 || pt.hasActiveAgreement).length },
+              { value: 'devendo', label: 'Devendo',             count: enriched.filter(pt => pt.totalOwed > 0 && !pt.hasActiveAgreement).length },
               { value: 'acordo',  label: 'Acordo em andamento', count: enriched.filter(pt => pt.hasActiveAgreement).length },
               { value: 'quitado', label: 'Quitado',             count: enriched.filter(pt => pt.totalOwed === 0 && !pt.hasActiveAgreement).length },
+              { value: 'all',     label: 'Todos',               count: enriched.length },
             ] as const).map(f => (
               <button
                 key={f.value}
