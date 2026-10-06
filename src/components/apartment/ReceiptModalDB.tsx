@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { formatCurrency, formatDate, getPeriodAndDueDate } from '@/lib/utils-app';
+import { formatCurrency, formatDate, getPeriodAndDueDate, clipPeriodToEndDate } from '@/lib/utils-app';
 import { FinancialRecordDB, calcOwed } from '@/hooks/useFinancial';
 import { ApartmentDB } from '@/hooks/useApartments';
 import { TenantDB } from '@/hooks/useTenants';
@@ -111,22 +111,8 @@ export default function ReceiptModalDB({
       contract?.desired_payment_day,
       contract?.desired_payment_date,
     );
-    // Para o último período de contrato encerrado: substituir fim pelo end_date real
-    // r.month é o mês de INÍCIO do período — o fim pode ser no mês seguinte
-    if (contract?.end_date) {
-      const [py, pm] = month.split('-').map(Number);
-      const endM = pm === 12 ? 1 : pm + 1;
-      const endY = pm === 12 ? py + 1 : py;
-      const periodEndMonth = `${endY}-${String(endM).padStart(2,'0')}`;
-      const contractEndMonth = contract.end_date.substring(0, 7);
-      if (periodEndMonth === contractEndMonth || month === contractEndMonth) {
-        const ed = new Date(contract.end_date + 'T12:00:00');
-        const edStr = `${String(ed.getDate()).padStart(2,'0')}/${String(ed.getMonth()+1).padStart(2,'0')}/${ed.getFullYear()}`;
-        const parts = periodLabel.split(' a ');
-        if (parts.length === 2) return `${parts[0]} a ${edStr}`;
-      }
-    }
-    return periodLabel;
+    // Último período de contrato encerrado: substitui o fim pelo end_date real
+    return clipPeriodToEndDate(periodLabel, contract?.end_date);
   }
 
   useEffect(() => {

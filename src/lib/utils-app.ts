@@ -29,6 +29,18 @@ function daysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate();
 }
 
+/** Encurta o fim do período ("dd/mm/yyyy a dd/mm/yyyy") para a data real de saída,
+ *  mas só quando a saída cai dentro do período (início <= saída < fim). */
+export function clipPeriodToEndDate(periodLabel: string, endDate: string | null | undefined): string {
+  if (!endDate) return periodLabel;
+  const parts = periodLabel.split(' a ');
+  if (parts.length !== 2) return periodLabel;
+  const toIso = (br: string) => br.split('/').reverse().join('-');
+  if (endDate < toIso(parts[0]) || endDate >= toIso(parts[1])) return periodLabel;
+  const [y, m, d] = endDate.substring(0, 10).split('-');
+  return `${parts[0]} a ${d}/${m}/${y}`;
+}
+
 export function getPeriodAndDueDate(
   monthStr: string,
   contractStartDate: string | null,

@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf';
-import { formatCurrency, formatDate, getPeriodAndDueDate } from '@/lib/utils-app';
+import { formatCurrency, formatDate, getPeriodAndDueDate, clipPeriodToEndDate } from '@/lib/utils-app';
 import { FinancialRecordDB, calcReceived, calcOwed } from '@/hooks/useFinancial';
 
 export interface ReceiptPDFInput {
@@ -108,19 +108,7 @@ export function buildReceiptPDF(input: ReceiptPDFInput): Uint8Array {
   const { periodLabel: rawPeriodLabel } = getPeriodAndDueDate(record.month, contractStartDate ?? null, paymentDay, contractDesiredPaymentDay, contractDesiredPaymentDate);
   // Ajusta o último período de contrato encerrado: substitui fim pelo dia real de saída
   function applyEndDate(label: string, month: string): string {
-    if (!contractEndDate) return label;
-    const [py, pm] = month.split('-').map(Number);
-    const endM = pm === 12 ? 1 : pm + 1;
-    const endY = pm === 12 ? py + 1 : py;
-    const periodEndMonth = `${endY}-${String(endM).padStart(2,'0')}`;
-    const contractEndMonth = contractEndDate.substring(0, 7);
-    if (periodEndMonth === contractEndMonth || month === contractEndMonth) {
-      const ed = new Date(contractEndDate + 'T12:00:00');
-      const edStr = `${String(ed.getDate()).padStart(2,'0')}/${String(ed.getMonth()+1).padStart(2,'0')}/${ed.getFullYear()}`;
-      const parts = label.split(' a ');
-      if (parts.length === 2) return `${parts[0]} a ${edStr}`;
-    }
-    return label;
+    return clipPeriodToEndDate(label, contractEndDate);
   }
   const periodLabel = applyEndDate(rawPeriodLabel, record.month);
   const receivedAmt = calcReceived(record);
