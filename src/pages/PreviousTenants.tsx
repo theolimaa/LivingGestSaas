@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Search, History, Building2, Home, AlertCircle,
   CheckCircle2, ChevronDown, ChevronRight, Loader2,
-  Pencil, FileText, Download, Handshake,
+  Pencil, FileText, Download, Handshake, Trash2,
 } from 'lucide-react';
 import Layout from '@/components/Layout';
 import { Button } from '@/components/ui/button';
@@ -23,8 +23,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useApartments } from '@/hooks/useApartments';
 import { useCondominiums } from '@/hooks/useCondominiums';
 import { useContracts, useUpsertContract } from '@/hooks/useContracts';
-import { useAllFinancialRecords, useUpsertFinancialRecord, calcOwed, calcReceived, FinancialRecordDB } from '@/hooks/useFinancial';
-import { formatCurrency, formatDate, getPeriodAndDueDate } from '@/lib/utils-app';
+import { useAllFinancialRecords, useUpsertFinancialRecord, useDeleteFinancialRecord, calcOwed, calcReceived, FinancialRecordDB } from '@/hooks/useFinancial';
+import { formatCurrency, formatDate, getPeriodAndDueDate, clipPeriodToEndDate } from '@/lib/utils-app';
 import { toast } from 'sonner';
 
 type PaymentMethod = 'pix' | 'especie';
@@ -50,6 +50,7 @@ export default function PreviousTenants() {
   const { data: contracts = [] } = useContracts();
   const { data: financialRecords = [] } = useAllFinancialRecords();
   const upsert = useUpsertFinancialRecord();
+  const deleteRecord = useDeleteFinancialRecord();
   const upsertContract = useUpsertContract();
   const { data: allAgreements = [] } = useAllDebtAgreements();
   const { data: allInstallments = [] } = useAllDebtInstallments();
@@ -97,6 +98,8 @@ export default function PreviousTenants() {
     date: string;
     method: PaymentMethod;
     debtAmount: string;
+    rentValue: string;
+    month: string;
   } | null>(null);
 
   // Enriquecer anteriores
@@ -168,11 +171,13 @@ export default function PreviousTenants() {
     if (!editModal) return;
     const paidAmt = parseFloat(editModal.paidAmount);
     const debtAmt = parseFloat(editModal.debtAmount);
-    if (isNaN(paidAmt)) { toast.error('Valor inválido.'); return; }
+    const rentValue = parseFloat(editModal.rentValue);
+    if (isNaN(paidAmt) || isNaN(rentValue) || rentValue < 0) { toast.error('Valor inválido.'); return; }
+    if (!/^\d{4}-\d{2}$/.test(editModal.month)) { toast.error('Informe o mês de referência.'); return; }
 
     // Se debtAmount foi preenchido explicitamente, ajusta paid_amount para rent_value - debt
     const effectivePaid = !isNaN(debtAmt)
-      ? Math.max(0, editModal.record.rent_value - debtAmt)
+      ? Math.max(0, rentValue - debtAmt)
       : paidAmt;
 
     // Se não pagou nada (0), trata como não pago — sem data, sem método
@@ -180,13 +185,22 @@ export default function PreviousTenants() {
 
     await upsert.mutateAsync({
       ...editModal.record,
+      rent_value: rentValue,
+      month: editModal.month,
       paid: !noPay,
       paid_amount: noPay ? null : effectivePaid,
       payment_date: noPay ? null : editModal.date,
       payment_method: noPay ? null : editModal.method,
     });
     setEditModal(null);
-    toast.success('Pagamento atualizado!');
+    toast.success('Registro atualizado!');
+  }
+
+  async function handleDeleteRecord() {
+    if (!editModal) return;
+    if (!window.confirm('Excluir este registro financeiro? Essa ação não pode ser desfeita.')) return;
+    await deleteRecord.mutateAsync({ id: editModal.record.id, apartmentId: editModal.record.apartment_id });
+    setEditModal(null);
   }
 
   async function handleDownloadReceipt(r: FinancialRecordDB, pt: typeof enriched[0]) {
@@ -457,20 +471,7 @@ export default function PreviousTenants() {
                                   let periodLabel = basePeriodLabel;
                                   // r.month é o mês de INÍCIO do período (ex: 2026-04 para 25/04→25/05)
                                   // O encerramento pode cair no mês SEGUINTE — precisamos comparar com o mês FIM do período
-                                  if (contract?.end_date) {
-                                    const [py, pm] = r.month.split('-').map(Number);
-                                    const endM = pm === 12 ? 1 : pm + 1;
-                                    const endY = pm === 12 ? py + 1 : py;
-                                    const periodEndMonth = `${endY}-${String(endM).padStart(2,'0')}`;
-                                    const contractEndMonth = contract.end_date.substring(0, 7);
-                                    // Aplica se o contrato encerrou durante este período (início ou fim do mês do período)
-                                    if (periodEndMonth === contractEndMonth || r.month === contractEndMonth) {
-                                      const ed = new Date(contract.end_date + 'T12:00:00');
-                                      const edStr = `${String(ed.getDate()).padStart(2,'0')}/${String(ed.getMonth()+1).padStart(2,'0')}/${ed.getFullYear()}`;
-                                      const parts = basePeriodLabel.split(' a ');
-                                      if (parts.length === 2) periodLabel = `${parts[0]} a ${edStr}`;
-                                    }
-                                  }
+                                  periodLabel = clipPeriodToEndDate(basePeriodLabel, contract?.end_date);
                                   return (
                                     <tr key={r.id} className="border-b border-border/50 last:border-0 hover:bg-muted/20">
                                       <td className="px-4 py-2.5 text-xs font-medium">{periodLabel}</td>
@@ -504,9 +505,11 @@ export default function PreviousTenants() {
                                               date: r.payment_date ?? new Date().toISOString().split('T')[0],
                                               method: (r.payment_method as PaymentMethod) ?? 'pix',
                                               debtAmount: owed > 0 ? String(owed) : '',
+                                              rentValue: String(r.rent_value),
+                                              month: r.month,
                                             })}
                                             className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-                                            title="Editar pagamento"
+                                            title="Editar registro"
                                           >
                                             <Pencil className="w-3.5 h-3.5" />
                                           </button>
@@ -627,14 +630,26 @@ export default function PreviousTenants() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Pencil className="w-5 h-5 text-primary" />
-              Editar Pagamento
+              Editar Registro
             </DialogTitle>
           </DialogHeader>
           {editModal && (
             <div className="py-2 space-y-4">
-              <div className="bg-muted/40 rounded-lg px-3 py-2 text-xs text-muted-foreground">
-                Contrato: <strong>{formatCurrency(editModal.record.rent_value)}</strong> ·
-                Mês: <strong>{editModal.record.month}</strong>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Mês de referência</Label>
+                  <Input type="month" className="mt-1"
+                    value={editModal.month}
+                    onChange={e => setEditModal(p => p ? { ...p, month: e.target.value } : null)}
+                  />
+                </div>
+                <div>
+                  <Label>Valor do aluguel (R$)</Label>
+                  <Input type="number" min="0" step="0.01" className="mt-1"
+                    value={editModal.rentValue}
+                    onChange={e => setEditModal(p => p ? { ...p, rentValue: e.target.value, debtAmount: '' } : null)}
+                  />
+                </div>
               </div>
               <div>
                 <Label>Valor Pago (R$)</Label>
@@ -646,7 +661,7 @@ export default function PreviousTenants() {
               <div>
                 <Label>Valor Devendo <span className="text-muted-foreground font-normal">(ou deixe calcular automaticamente)</span></Label>
                 <Input type="number" min="0" step="0.01" className="mt-1"
-                  placeholder={String(Math.max(0, editModal.record.rent_value - parseFloat(editModal.paidAmount || '0')))}
+                  placeholder={String(Math.max(0, (parseFloat(editModal.rentValue) || 0) - parseFloat(editModal.paidAmount || '0')))}
                   value={editModal.debtAmount}
                   onChange={e => setEditModal(p => p ? { ...p, debtAmount: e.target.value } : null)}
                 />
@@ -673,12 +688,18 @@ export default function PreviousTenants() {
               </div>
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="sm:justify-between">
+            <Button variant="outline" className="text-destructive hover:text-destructive gap-1"
+              onClick={handleDeleteRecord} disabled={deleteRecord.isPending}>
+              <Trash2 className="w-4 h-4" /> Excluir
+            </Button>
+            <div className="flex gap-2">
             <Button variant="outline" onClick={() => setEditModal(null)}>Cancelar</Button>
             <Button onClick={handleSaveEdit} disabled={upsert.isPending}>
               {upsert.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               Salvar
             </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
