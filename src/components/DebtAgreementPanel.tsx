@@ -355,6 +355,7 @@ export function DebtAgreementPanel({ previousTenantId, apartmentId, totalOwed, t
 
   const installmentValue = parseFloat(form.agreedAmount) / (parseInt(form.installmentCount) || 1);
   const hasActive = agreements.some(a => a.status === 'active');
+  const isForgiving = parseFloat(form.agreedAmount) === 0;
 
   async function handleCreate() {
     const orig = parseFloat(form.originalAmount);
@@ -463,25 +464,47 @@ export function DebtAgreementPanel({ previousTenantId, apartmentId, totalOwed, t
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Número de Parcelas</Label>
-                <Input type="number" min="1" max="120" className="mt-1" value={form.installmentCount}
-                  onChange={e => setForm(p => ({ ...p, installmentCount: e.target.value }))} />
+            <button
+              type="button"
+              onClick={() => setForm(p => ({
+                ...p,
+                agreedAmount: isForgiving ? p.originalAmount : '0',
+                installmentCount: '1',
+              }))}
+              className={`w-full flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                isForgiving ? 'border-green-500 bg-green-500/10 text-green-700 dark:text-green-400' : 'border-border text-muted-foreground hover:bg-muted/40'
+              }`}
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              {isForgiving ? 'Dívida zerada — clique para desfazer' : 'Zerar dívida (perdoar)'}
+            </button>
+
+            {isForgiving ? (
+              <div className="rounded-lg border border-green-500/30 bg-green-500/5 px-3 py-2 text-xs text-muted-foreground">
+                O acordo será registrado como <span className="font-semibold text-foreground">quitado</span>, sem parcelas.
+                O inquilino sai sem débito.
               </div>
-              <div>
-                <Label>Valor por Parcela</Label>
-                <div className="mt-1 h-9 px-3 flex items-center rounded-md border border-border bg-muted/40 text-sm font-semibold">
-                  {isNaN(installmentValue) ? '—' : formatCurrency(installmentValue)}
+            ) : (<>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Número de Parcelas</Label>
+                  <Input type="number" min="1" max="120" className="mt-1" value={form.installmentCount}
+                    onChange={e => setForm(p => ({ ...p, installmentCount: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>Valor por Parcela</Label>
+                  <div className="mt-1 h-9 px-3 flex items-center rounded-md border border-border bg-muted/40 text-sm font-semibold">
+                    {isNaN(installmentValue) ? '—' : formatCurrency(installmentValue)}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div>
-              <Label>Primeira Parcela em</Label>
-              <Input type="date" className="mt-1" value={form.startDate}
-                onChange={e => setForm(p => ({ ...p, startDate: e.target.value }))} />
-            </div>
+              <div>
+                <Label>Primeira Parcela em</Label>
+                <Input type="date" className="mt-1" value={form.startDate}
+                  onChange={e => setForm(p => ({ ...p, startDate: e.target.value }))} />
+              </div>
+            </>)}
 
             <div>
               <Label>Observações <span className="text-muted-foreground font-normal">(opcional)</span></Label>
@@ -490,16 +513,18 @@ export function DebtAgreementPanel({ previousTenantId, apartmentId, totalOwed, t
                 placeholder="Ex: 8 parcelas sendo 6 da dívida + 2 de juros" />
             </div>
 
-            <div className="bg-muted/40 rounded-lg px-3 py-2 text-xs text-muted-foreground space-y-0.5">
-              <p><span className="font-semibold text-foreground">{form.installmentCount} parcelas</span> de {isNaN(installmentValue) ? '—' : formatCurrency(installmentValue)}</p>
-              <p>Total: {formatCurrency(parseFloat(form.agreedAmount) || 0)}</p>
-            </div>
+            {!isForgiving && (
+              <div className="bg-muted/40 rounded-lg px-3 py-2 text-xs text-muted-foreground space-y-0.5">
+                <p><span className="font-semibold text-foreground">{form.installmentCount} parcelas</span> de {isNaN(installmentValue) ? '—' : formatCurrency(installmentValue)}</p>
+                <p>Total: {formatCurrency(parseFloat(form.agreedAmount) || 0)}</p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
             <Button onClick={handleCreate} disabled={createAgreement.isPending}>
               {createAgreement.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              Criar Acordo
+              {isForgiving ? 'Zerar Dívida' : 'Criar Acordo'}
             </Button>
           </DialogFooter>
         </DialogContent>
