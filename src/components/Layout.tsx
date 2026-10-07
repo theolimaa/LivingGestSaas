@@ -17,11 +17,9 @@ import {
   History,
   Files,
 } from 'lucide-react';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import NotificationBell from '@/components/NotificationBell';
-
-const INACTIVITY_TIMEOUT = 15 * 60 * 1000;
 
 const navItems = [
   { label: 'Início', icon: Home, path: '/' },
@@ -51,26 +49,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [financeiroOpen, setFinanceiroOpen] = useState(
     location.pathname.startsWith('/financeiro')
   );
-  const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
- 
-  const resetTimer = useCallback(() => {
-    if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
-    inactivityTimer.current = setTimeout(async () => {
-      await signOut();
-      navigate('/login');
-    }, INACTIVITY_TIMEOUT);
-  }, [signOut, navigate]);
- 
-  useEffect(() => {
-    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'];
-    events.forEach(e => window.addEventListener(e, resetTimer, { passive: true }));
-    resetTimer();
-    return () => {
-      events.forEach(e => window.removeEventListener(e, resetTimer));
-      if (inactivityTimer.current) clearTimeout(inactivityTimer.current);
-    };
-  }, [resetTimer]);
- 
+  // Logout por inatividade: ver useSessionTimeout (15 min, com aviso 2 min antes)
+
   useEffect(() => {
     setMobileMenuOpen(false);
   }, [location.pathname]);

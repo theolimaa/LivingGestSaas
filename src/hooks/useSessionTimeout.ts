@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-const TIMEOUT_MS = 30 * 60 * 1000; // 30 minutos
+const TIMEOUT_MS = 15 * 60 * 1000; // 15 minutos
 const WARN_MS = 2 * 60 * 1000;     // avisa 2 min antes
 
 export function useSessionTimeout() {
