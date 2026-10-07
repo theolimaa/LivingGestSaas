@@ -79,6 +79,8 @@ function DetailModal({ open, onClose, title, records, tenants, apartments, condo
       dateCol = r.payment_date ?? '-';
     } else if (variant === 'debt') {
       dateCol = r.paid ? (r.payment_date ?? '-') : (r.month ?? '-');
+    } else if ((r as any)._dueDateLabel) {
+      dateCol = (r as any)._dueDateLabel;
     } else {
       const { dueDateLabel } = getPeriodAndDueDate(r.month, contract?.start_date ?? null, contract?.payment_day ?? 1, contract?.desired_payment_day, contract?.desired_payment_date);
       dateCol = dueDateLabel;
@@ -362,7 +364,7 @@ export default function Dashboard() {
     .filter(inst => {
       if (inst.paid) return false;
       if (!inst.due_date) return false;
-      const [y, m] = inst.due_date.split('-').map(Number);
+      const y = Number(inst.due_date.split('-')[0]);
       if (selectedMonthKey) return inst.due_date.startsWith(selectedMonthKey);
       return y === selectedYear;
     })
@@ -399,6 +401,7 @@ export default function Dashboard() {
         _condoName: condo?.name ?? '—',
         _aptUnit: apt?.unit_number ?? '—',
         _isDue: true,
+        _dueDateLabel: inst.due_date!.split('-').reverse().join('/'),
       } as any;
     });
 

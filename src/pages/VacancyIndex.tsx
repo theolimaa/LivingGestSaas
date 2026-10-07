@@ -1,96 +1,217 @@
-import { useState } from 'react';
-import { DoorOpen, Loader2, TrendingDown, TrendingUp, Home } from 'lucide-react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { ChevronDown, ChevronRight, DoorOpen, Home, Loader2, TrendingDown } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import Layout from '@/components/Layout';
 import { formatCurrency, MONTHS, YEARS } from '@/lib/utils-app';
 import { useCondominiums } from '@/hooks/useCondominiums';
 import { useApartments } from '@/hooks/useApartments';
-import { useFinancialRecordsByYear } from '@/hooks/useFinancial';
+import { useContracts } from '@/hooks/useContracts';
+import { useTenants, useAllPreviousTenants } from '@/hooks/useTenants';
+
+// Vacância = dia sem contrato vigente (início → "Contrato até") no apartamento.
+// Perda do mês = dias vagos ÷ dias do mês × aluguel de referência do apartamento
+// (aluguel do último contrato; sem contrato, média do condomínio).
+// Tudo é calculado a partir dos contratos, então atualiza sozinho quando um contrato muda.
+
+const DAY = 86400000;
+const pad = (n: number) => String(n).padStart(2, '0');
+const toIdx = (s: string) => {
+  const [y, m, d] = s.slice(0, 10).split('-').map(Number);
+  return Math.round(Date.UTC(y, m - 1, d) / DAY);
+};
+const fmtDate = (i: number) => {
+  const d = new Date(i * DAY);
+  return `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
+};
+const daysInMonth = (year: number, m0: number) => new Date(Date.UTC(year, m0 + 1, 0)).getUTCDate();
+const todayKey = () => {
+  const n = new Date();
+  return `${n.getFullYear()}-${pad(n.getMonth() + 1)}-${pad(n.getDate())}`;
+};
+
+interface VacancyEntry {
+  key: string;
+  gapKey: string;
+  aptId: string;
+  condo: string;
+  unit: string;
+  month: number;
+  from: number;
+  to: number;
+  days: number;
+  dim: number;
+  rent: number;
+  loss: number;
+  ongoing: boolean;
+  reason: string;
+}
+
+function gapReason(prev: string | null, prevEnd: number | null, next: string | null, nextStart: number | null) {
+  const left = prev ? `${prev} saiu${prevEnd !== null ? ` (contrato até ${fmtDate(prevEnd)})` : ''}` : 'sem contrato anterior';
+  const right = next && nextStart !== null ? `${next} entra em ${fmtDate(nextStart)}` : 'sem novo contrato';
+  return `${left}; ${right}`;
+}
 
 export default function VacancyIndex() {
-  const currentYear = new Date().getFullYear();
+  const [today, setToday] = useState(todayKey());
+  useEffect(() => {
+    const t = setInterval(() => setToday(todayKey()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  const currentYear = Number(today.slice(0, 4));
+  const currentMonthIdx = Number(today.slice(5, 7)) - 1;
+
   const [selectedYear, setSelectedYear] = useState(String(currentYear));
   const [selectedCondo, setSelectedCondo] = useState('all');
+  const [open, setOpen] = useState<Set<number>>(new Set());
 
-  const { data: condominiums = [] } = useCondominiums();
-  const { data: apartments = [] } = useApartments();
-  const { data: financialRecords = [], isLoading } = useFinancialRecordsByYear(Number(selectedYear));
+  const { data: condominiums = [], isLoading: l1 } = useCondominiums();
+  const { data: apartments = [], isLoading: l2 } = useApartments();
+  const { data: contracts = [], isLoading: l3 } = useContracts();
+  const { data: tenants = [], isLoading: l4 } = useTenants();
+  const { data: previousTenants = [], isLoading: l5 } = useAllPreviousTenants();
+  const isLoading = l1 || l2 || l3 || l4 || l5;
 
-  const filteredCondos = selectedCondo === 'all' ? condominiums : condominiums.filter(c => c.id === selectedCondo);
+  const year = Number(selectedYear);
 
-  // Para cada mês do ano, calcula ocupação
-  const monthlyData = MONTHS.map((monthLabel, idx) => {
-    const monthKey = `${selectedYear}-${String(idx + 1).padStart(2, '0')}`;
-    const condosToCheck = filteredCondos;
-    const aptsToCheck = apartments.filter(a =>
-      condosToCheck.some(c => c.id === a.condominium_id)
-    );
-    const totalApts = aptsToCheck.length;
-    const occupiedApts = aptsToCheck.filter(apt =>
-      financialRecords.some(r => r.apartment_id === apt.id && r.month === monthKey)
-    ).length;
-    const vacantApts = totalApts - occupiedApts;
-    const occupancyRate = totalApts > 0 ? (occupiedApts / totalApts) * 100 : 0;
-    const vacancyRate = totalApts > 0 ? (vacantApts / totalApts) * 100 : 0;
-    const potentialRevenue = financialRecords
-      .filter(r => aptsToCheck.some(a => a.id === r.apartment_id) && r.month === monthKey)
-      .reduce((s, r) => s + r.rent_value, 0);
+  const { entries, vacantNow, totalApts } = useMemo(() => {
+    const todayIdx = toIdx(today);
+    const yearStart = toIdx(`${year}-01-01`);
+    const yearEnd = Math.min(toIdx(`${year}-12-31`), todayIdx);
 
-    return { monthLabel, monthKey, totalApts, occupiedApts, vacantApts, occupancyRate, vacancyRate, potentialRevenue };
+    const tenantInfo = new Map<string, { apartmentId: string; name: string }>();
+    for (const t of tenants) tenantInfo.set(t.id, { apartmentId: t.apartment_id, name: `${t.first_name} ${t.last_name}`.trim() });
+    for (const p of previousTenants) {
+      if (p.original_id && p.apartment_id && !tenantInfo.has(p.original_id)) {
+        tenantInfo.set(p.original_id, { apartmentId: p.apartment_id, name: `${p.first_name} ${p.last_name}`.trim() });
+      }
+    }
+
+    type Interval = { start: number; end: number; rent: number; name: string };
+    const byApt = new Map<string, Interval[]>();
+    for (const c of contracts) {
+      const info = tenantInfo.get(c.tenant_id);
+      if (!info || !c.start_date) continue;
+      const list = byApt.get(info.apartmentId) ?? [];
+      list.push({ start: toIdx(c.start_date), end: c.end_date ? toIdx(c.end_date) : Infinity, rent: Number(c.rent_value), name: info.name });
+      byApt.set(info.apartmentId, list);
+    }
+
+    const condoAvg = new Map<string, number>();
+    for (const condo of condominiums) {
+      const rents = apartments.filter(a => a.condominium_id === condo.id).flatMap(a => (byApt.get(a.id) ?? []).map(i => i.rent));
+      condoAvg.set(condo.id, rents.length ? rents.reduce((s, r) => s + r, 0) / rents.length : 0);
+    }
+
+    const condoById = new Map(condominiums.map(c => [c.id, c.name]));
+    const aptsInScope = apartments.filter(a => selectedCondo === 'all' || a.condominium_id === selectedCondo);
+    const result: VacancyEntry[] = [];
+
+    if (yearEnd >= yearStart) {
+      for (const apt of aptsInScope) {
+        const intervals = [...(byApt.get(apt.id) ?? [])].sort((a, b) => a.start - b.start);
+        const rent = intervals.length
+          ? intervals[intervals.length - 1].rent
+          : condoAvg.get(apt.condominium_id) ?? 0;
+        const condo = condoById.get(apt.condominium_id) ?? '—';
+
+        const addGap = (gapFrom: number, gapTo: number, prev: string | null, prevEnd: number | null, next: string | null, nextStart: number | null) => {
+          if (gapFrom > gapTo) return;
+          const ongoing = gapTo === yearEnd && yearEnd === todayIdx && (nextStart === null || nextStart > todayIdx);
+          const reason = gapReason(prev, prevEnd, next, nextStart);
+          const firstMonth = new Date(gapFrom * DAY).getUTCMonth();
+          const lastMonth = new Date(gapTo * DAY).getUTCMonth();
+          for (let m = firstMonth; m <= lastMonth; m++) {
+            const dim = daysInMonth(year, m);
+            const mStart = toIdx(`${year}-${pad(m + 1)}-01`);
+            const from = Math.max(gapFrom, mStart);
+            const to = Math.min(gapTo, mStart + dim - 1);
+            const days = to - from + 1;
+            result.push({
+              key: `${apt.id}-${gapFrom}-${m}`, gapKey: `${apt.id}-${gapFrom}`, aptId: apt.id, condo, unit: apt.unit_number, month: m,
+              from, to, days, dim, rent, loss: (days / dim) * rent, ongoing: ongoing && m === lastMonth, reason,
+            });
+          }
+        };
+
+        let cursor = yearStart;
+        let maxEnd = -Infinity;
+        let lastName: string | null = null;
+        let lastEnd: number | null = null;
+        let closed = false;
+        for (const iv of intervals) {
+          if (iv.start > cursor) {
+            addGap(cursor, Math.min(iv.start - 1, yearEnd), lastName, lastEnd, iv.name, iv.start);
+          }
+          if (iv.end >= maxEnd) {
+            maxEnd = iv.end;
+            lastName = iv.name;
+            lastEnd = Number.isFinite(iv.end) ? iv.end : null;
+          }
+          cursor = Math.max(cursor, iv.end + 1);
+          if (cursor > yearEnd) { closed = true; break; }
+        }
+        if (!closed) addGap(cursor, yearEnd, lastName, lastEnd, null, null);
+      }
+    }
+
+    const vacantNow = new Set(result.filter(e => e.ongoing).map(e => e.aptId)).size;
+    return { entries: result, vacantNow, totalApts: aptsInScope.length };
+  }, [today, year, selectedCondo, tenants, previousTenants, contracts, apartments, condominiums]);
+
+  const monthlyData = MONTHS.map((label, m) => {
+    const list = entries.filter(e => e.month === m).sort((a, b) => a.condo.localeCompare(b.condo) || a.unit.localeCompare(b.unit, undefined, { numeric: true }) || a.from - b.from);
+    return {
+      label, m, list,
+      aptCount: new Set(list.map(e => e.aptId)).size,
+      days: list.reduce((s, e) => s + e.days, 0),
+      loss: list.reduce((s, e) => s + e.loss, 0),
+    };
   });
+  const visibleMonths = monthlyData.filter(md => year < currentYear || (year === currentYear && md.m <= currentMonthIdx));
+  const totalLoss = entries.reduce((s, e) => s + e.loss, 0);
+  const isCurrentYear = year === currentYear;
+  const currentMonthLoss = isCurrentYear ? monthlyData[currentMonthIdx].loss : null;
+  const occupancyNow = totalApts > 0 ? ((totalApts - vacantNow) / totalApts) * 100 : 0;
+  const ongoingEntries = entries.filter(e => e.ongoing);
 
-  // Por condomínio no mês atual
-  const currentMonthIdx = new Date().getMonth();
-  const currentMonthKey = `${selectedYear}-${String(currentMonthIdx + 1).padStart(2, '0')}`;
+  const byApartment = useMemo(() => {
+    const map = new Map<string, { condo: string; unit: string; days: number; loss: number; periods: Map<string, VacancyEntry[]> }>();
+    for (const e of entries) {
+      const cur = map.get(e.aptId) ?? { condo: e.condo, unit: e.unit, days: 0, loss: 0, periods: new Map() };
+      cur.days += e.days;
+      cur.loss += e.loss;
+      cur.periods.set(e.gapKey, [...(cur.periods.get(e.gapKey) ?? []), e]);
+      map.set(e.aptId, cur);
+    }
+    return [...map.values()].sort((a, b) => b.loss - a.loss);
+  }, [entries]);
 
-  const condoBreakdown = filteredCondos.map(condo => {
-    const condoApts = apartments.filter(a => a.condominium_id === condo.id);
-    const total = condoApts.length;
-    const occupied = condoApts.filter(apt =>
-      financialRecords.some(r => r.apartment_id === apt.id && r.month === currentMonthKey)
-    ).length;
-    const vacant = total - occupied;
-    const vacancyRate = total > 0 ? (vacant / total) * 100 : 0;
-    return { condo, total, occupied, vacant, vacancyRate };
-  });
-
-  // Média anual
-  const validMonths = monthlyData.filter(m => m.totalApts > 0);
-  const avgVacancy = validMonths.length > 0
-    ? validMonths.reduce((s, m) => s + m.vacancyRate, 0) / validMonths.length
-    : 0;
-  const avgOccupancy = 100 - avgVacancy;
-  const currentMonth = monthlyData[currentMonthIdx];
-
-  // Barra de progresso
-  function Bar({ value, color }: { value: number; color: string }) {
-    return (
-      <div className="w-full bg-muted rounded-full h-2">
-        <div
-          className="h-2 rounded-full transition-all duration-500"
-          style={{ width: `${Math.min(value, 100)}%`, backgroundColor: color }}
-        />
-      </div>
-    );
+  function toggle(m: number) {
+    setOpen(prev => {
+      const next = new Set(prev);
+      if (next.has(m)) next.delete(m); else next.add(m);
+      return next;
+    });
   }
 
   return (
     <Layout>
       <div className="p-4 md:p-6 space-y-4 md:space-y-6 w-full max-w-[1360px] mx-auto">
-        {/* Header */}
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <DoorOpen className="w-6 h-6 text-primary" />
             Índice de Vacância
           </h1>
-          <p className="text-muted-foreground text-sm">Acompanhe a ocupação dos apartamentos ao longo do tempo</p>
+          <p className="text-muted-foreground text-sm">
+            Quanto se deixou de receber com apartamentos sem contrato vigente. Atualiza sozinho a partir dos contratos.
+          </p>
         </div>
 
-        {/* Filtros */}
         <div className="flex gap-3">
           <Select value={selectedYear} onValueChange={setSelectedYear}>
             <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
-            <SelectContent>{YEARS.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
+            <SelectContent>{YEARS.filter(y => y <= currentYear).map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
           </Select>
           <Select value={selectedCondo} onValueChange={setSelectedCondo}>
             <SelectTrigger className="w-52"><SelectValue placeholder="Todos os condomínios" /></SelectTrigger>
@@ -105,122 +226,158 @@ export default function VacancyIndex() {
           <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
         ) : (
           <>
-            {/* Cards resumo */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="stat-card">
-                <p className="text-xs font-semibold text-foreground mb-1 relative z-10">Taxa de Ocupação (mês atual)</p>
-                <p className="text-2xl font-bold relative z-10" style={{ color: 'hsl(var(--paid))' }}>
-                  {currentMonth?.occupancyRate.toFixed(1)}%
-                </p>
-                <p className="text-xs text-muted-foreground mt-1 relative z-10">
-                  {currentMonth?.occupiedApts}/{currentMonth?.totalApts} aptos
-                </p>
+                <p className="text-xs font-semibold text-foreground mb-1 relative z-10">Deixado de receber ({selectedYear})</p>
+                <p className="text-2xl font-bold relative z-10" style={{ color: 'hsl(var(--overdue))' }}>{formatCurrency(totalLoss)}</p>
+                <p className="text-xs text-muted-foreground mt-1 relative z-10">{entries.reduce((s, e) => s + e.days, 0)} dias vagos no total</p>
               </div>
               <div className="stat-card">
-                <p className="text-xs font-semibold text-foreground mb-1 relative z-10">Taxa de Vacância (mês atual)</p>
-                <p className="text-2xl font-bold relative z-10" style={{ color: currentMonth?.vacancyRate > 20 ? 'hsl(var(--overdue))' : 'hsl(var(--warning))' }}>
-                  {currentMonth?.vacancyRate.toFixed(1)}%
-                </p>
-                <p className="text-xs text-muted-foreground mt-1 relative z-10">
-                  {currentMonth?.vacantApts} vago{currentMonth?.vacantApts !== 1 ? 's' : ''}
-                </p>
+                <p className="text-xs font-semibold text-foreground mb-1 relative z-10">Perda em {MONTHS[currentMonthIdx]}</p>
+                <p className="text-2xl font-bold relative z-10">{currentMonthLoss === null ? '—' : formatCurrency(currentMonthLoss)}</p>
+                <p className="text-xs text-muted-foreground mt-1 relative z-10">mês atual</p>
               </div>
               <div className="stat-card">
-                <p className="text-xs font-semibold text-foreground mb-1 relative z-10">Média de Ocupação ({selectedYear})</p>
-                <p className="text-2xl font-bold text-primary relative z-10">{avgOccupancy.toFixed(1)}%</p>
-                <div className="mt-2 relative z-10"><Bar value={avgOccupancy} color="hsl(var(--primary))" /></div>
+                <p className="text-xs font-semibold text-foreground mb-1 relative z-10">Vagos hoje</p>
+                <p className="text-2xl font-bold relative z-10" style={{ color: vacantNow > 0 ? 'hsl(var(--overdue))' : 'hsl(var(--paid))' }}>
+                  {isCurrentYear ? vacantNow : '—'}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1 relative z-10">de {totalApts} aptos</p>
               </div>
               <div className="stat-card">
-                <p className="text-xs font-semibold text-foreground mb-1 relative z-10">Receita Potencial (mês atual)</p>
-                <p className="text-2xl font-bold relative z-10">{formatCurrency(currentMonth?.potentialRevenue ?? 0)}</p>
-                <p className="text-xs text-muted-foreground mt-1 relative z-10">contratos ativos</p>
+                <p className="text-xs font-semibold text-foreground mb-1 relative z-10">Ocupação hoje</p>
+                <p className="text-2xl font-bold text-primary relative z-10">{isCurrentYear ? `${occupancyNow.toFixed(1)}%` : '—'}</p>
+                <p className="text-xs text-muted-foreground mt-1 relative z-10">{totalApts - vacantNow}/{totalApts} aptos</p>
               </div>
             </div>
 
-            {/* Histórico mensal */}
+            {isCurrentYear && ongoingEntries.length > 0 && (
+              <div className="bg-card border border-border rounded-xl overflow-x-auto">
+                <div className="px-5 py-3 border-b border-border">
+                  <h2 className="font-semibold flex items-center gap-2"><TrendingDown className="w-4 h-4 text-destructive" /> Vagos agora</h2>
+                </div>
+                <div className="divide-y divide-border">
+                  {ongoingEntries.map(e => (
+                    <div key={e.key} className="px-5 py-3 flex items-center gap-4 text-sm">
+                      <Home className="w-4 h-4 text-primary shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold">{e.condo} · Apto {e.unit}</p>
+                        <p className="text-xs text-muted-foreground">{e.reason}</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground text-right">perde ~{formatCurrency(e.rent)}/mês</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="bg-card border border-border rounded-xl overflow-x-auto">
               <div className="px-5 py-3 border-b border-border">
-                <h2 className="font-semibold">Histórico Mensal — {selectedYear}</h2>
+                <h2 className="font-semibold">Perda por mês — {selectedYear}</h2>
+                <p className="text-xs text-muted-foreground">Clique no mês para ver a justificativa de cada valor.</p>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-xs text-muted-foreground border-b border-border bg-muted/30">
-                      <th className="text-left px-4 py-2">Mês</th>
-                      <th className="text-center px-4 py-2">Total</th>
-                      <th className="text-center px-4 py-2">Ocupados</th>
-                      <th className="text-center px-4 py-2">Vagos</th>
-                      <th className="text-left px-4 py-2 w-48">Ocupação</th>
-                      <th className="text-right px-4 py-2">Receita Potencial</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {monthlyData.map((m, idx) => {
-                      const isCurrentMonth = idx === currentMonthIdx && String(currentYear) === selectedYear;
-                      return (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs text-muted-foreground border-b border-border bg-muted/30">
+                    <th className="text-left px-4 py-2">Mês</th>
+                    <th className="text-center px-4 py-2">Aptos com vacância</th>
+                    <th className="text-center px-4 py-2">Dias vagos</th>
+                    <th className="text-right px-4 py-2">Deixado de receber</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleMonths.map(md => {
+                    const isOpen = open.has(md.m);
+                    const clickable = md.list.length > 0;
+                    return (
+                      <Fragment key={md.m}>
                         <tr
-                          key={m.monthKey}
-                          className={`border-b border-border/50 last:border-0 ${isCurrentMonth ? 'bg-primary/5' : ''}`}
+                          className={`border-b border-border/50 ${clickable ? 'cursor-pointer hover:bg-muted/30' : ''} ${isCurrentYear && md.m === currentMonthIdx ? 'bg-primary/5' : ''}`}
+                          onClick={() => clickable && toggle(md.m)}
                         >
                           <td className="px-4 py-2.5 font-medium">
-                            {m.monthLabel}
-                            {isCurrentMonth && <span className="ml-2 text-xs text-primary">(atual)</span>}
+                            <span className="inline-flex items-center gap-1">
+                              {clickable ? (isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />) : <span className="w-4" />}
+                              {md.label}
+                              {isCurrentYear && md.m === currentMonthIdx && <span className="ml-1 text-xs text-primary">(atual)</span>}
+                            </span>
                           </td>
-                          <td className="px-4 py-2.5 text-center">{m.totalApts}</td>
-                          <td className="px-4 py-2.5 text-center" style={{ color: 'hsl(var(--paid))' }}>
-                            {m.occupiedApts}
-                          </td>
-                          <td className="px-4 py-2.5 text-center" style={{ color: m.vacantApts > 0 ? 'hsl(var(--overdue))' : 'hsl(var(--paid))' }}>
-                            {m.vacantApts}
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <div className="flex items-center gap-2">
-                              <Bar value={m.occupancyRate} color={m.occupancyRate >= 80 ? '#22c55e' : m.occupancyRate >= 60 ? '#eab308' : '#ef4444'} />
-                              <span className="text-xs text-muted-foreground w-10 text-right">
-                                {m.occupancyRate.toFixed(0)}%
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-2.5 text-right font-semibold">
-                            {m.potentialRevenue > 0 ? formatCurrency(m.potentialRevenue) : '—'}
+                          <td className="px-4 py-2.5 text-center">{md.aptCount}</td>
+                          <td className="px-4 py-2.5 text-center">{md.days}</td>
+                          <td className="px-4 py-2.5 text-right font-semibold" style={{ color: md.loss > 0 ? 'hsl(var(--overdue))' : undefined }}>
+                            {md.loss > 0 ? formatCurrency(md.loss) : '—'}
                           </td>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                        {isOpen && (
+                          <tr className="border-b border-border/50 bg-muted/20">
+                            <td colSpan={4} className="px-4 py-3">
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="text-muted-foreground">
+                                      <th className="text-left py-1 pr-3">Apartamento</th>
+                                      <th className="text-left py-1 pr-3">Período vago</th>
+                                      <th className="text-center py-1 pr-3">Dias</th>
+                                      <th className="text-left py-1 pr-3">Cálculo</th>
+                                      <th className="text-left py-1 pr-3">Motivo</th>
+                                      <th className="text-right py-1">Perda</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {md.list.map(e => (
+                                      <tr key={e.key} className="border-t border-border/40 align-top">
+                                        <td className="py-1.5 pr-3 font-medium whitespace-nowrap">{e.condo} · {e.unit}</td>
+                                        <td className="py-1.5 pr-3 whitespace-nowrap">{fmtDate(e.from)} a {fmtDate(e.to)}{e.ongoing ? ' (em andamento)' : ''}</td>
+                                        <td className="py-1.5 pr-3 text-center">{e.days}</td>
+                                        <td className="py-1.5 pr-3 whitespace-nowrap text-muted-foreground">{e.days}/{e.dim} × {formatCurrency(e.rent)}</td>
+                                        <td className="py-1.5 pr-3 text-muted-foreground">{e.reason}</td>
+                                        <td className="py-1.5 text-right font-semibold whitespace-nowrap">{formatCurrency(e.loss)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                  <tr className="bg-muted/30 font-semibold">
+                    <td className="px-4 py-2.5">Total {selectedYear}</td>
+                    <td />
+                    <td className="px-4 py-2.5 text-center">{entries.reduce((s, e) => s + e.days, 0)}</td>
+                    <td className="px-4 py-2.5 text-right">{formatCurrency(totalLoss)}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
 
-            {/* Por condomínio */}
             <div className="bg-card border border-border rounded-xl overflow-x-auto">
               <div className="px-5 py-3 border-b border-border">
-                <h2 className="font-semibold">Por Condomínio — {MONTHS[currentMonthIdx]}</h2>
+                <h2 className="font-semibold">Por apartamento — {selectedYear}</h2>
               </div>
-              <div className="divide-y divide-border">
-                {condoBreakdown.map(({ condo, total, occupied, vacant, vacancyRate }) => (
-                  <div key={condo.id} className="px-5 py-4 flex items-center gap-4">
-                    <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary/10 shrink-0">
-                      <Home className="w-4 h-4 text-primary" />
+              {byApartment.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8 text-sm">Nenhuma vacância no período.</p>
+              ) : (
+                <div className="divide-y divide-border">
+                  {byApartment.map(a => (
+                    <div key={`${a.condo}-${a.unit}`} className="px-5 py-3 text-sm">
+                      <div className="flex items-center justify-between gap-4">
+                        <p className="font-semibold">{a.condo} · Apto {a.unit}</p>
+                        <p className="font-semibold" style={{ color: 'hsl(var(--overdue))' }}>{formatCurrency(a.loss)} <span className="text-xs text-muted-foreground font-normal">({a.days} dias)</span></p>
+                      </div>
+                      <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                        {[...a.periods.values()].map(list => (
+                          <li key={list[0].key}>
+                            {fmtDate(list[0].from)} a {fmtDate(list[list.length - 1].to)} — {list.reduce((s, e) => s + e.days, 0)} dias · {list[0].reason}
+                          </li>
+                        ))}
+                      </ul>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm">{condo.name}</p>
-                      <p className="text-xs text-muted-foreground">{occupied} ocupados · {vacant} vago{vacant !== 1 ? 's' : ''}</p>
-                    </div>
-                    <div className="w-40">
-                      <Bar
-                        value={(occupied / total) * 100}
-                        color={vacancyRate === 0 ? '#22c55e' : vacancyRate < 20 ? '#eab308' : '#ef4444'}
-                      />
-                    </div>
-                    <div className="w-16 text-right">
-                      <span className={`text-sm font-bold ${vacancyRate === 0 ? 'text-green-500' : vacancyRate < 20 ? 'text-yellow-500' : 'text-red-500'}`}>
-                        {vacancyRate.toFixed(0)}% vac.
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </>
         )}
