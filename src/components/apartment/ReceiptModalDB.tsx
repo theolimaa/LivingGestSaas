@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileText, Download, X, Pencil, Share2, Save, Loader2 } from 'lucide-react';
+import { FileText, Download, X, Pencil, Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,6 @@ import { TenantDB } from '@/hooks/useTenants';
 import { ContractDB } from '@/hooks/useContracts';
 import { useAuth } from '@/hooks/useAuth';
 import { useResidents } from '@/hooks/useTenants';
-import { useSaveReceipt } from '@/hooks/useReceipts';
 import jsPDF from 'jspdf';
 
 interface Props {
@@ -60,7 +59,6 @@ export default function ReceiptModalDB({
 }: Props) {
   const { user } = useAuth();
   const { data: residents = [] } = useResidents(tenant.id);
-  const saveReceipt = useSaveReceipt();
   // editableValues: overrides para a coluna "Valor" por registro
   const [editableValues, setEditableValues] = useState<Record<string, number>>({});
   // editablePaidAmounts: overrides para a coluna "Pago" por registro
@@ -236,17 +234,6 @@ export default function ReceiptModalDB({
     return doc.output('arraybuffer') as unknown as Uint8Array;
   }
 
-  function handleSaveOnly() {
-    const bytes = buildPDF();
-    saveReceipt.mutate({
-      pdfBytes: bytes, receiptCode, financialRecordId: record.id,
-      apartmentId: apartment.id, tenantId: tenant.id, contractId: record.contract_id,
-      month: record.month, paymentDate: record.payment_date,
-      condominiumName, apartmentUnit: apartment.unit_number,
-      tenantName: `${tenant.first_name} ${tenant.last_name}`,
-    });
-  }
-
   function handleDownload() {
     const bytes = buildPDF();
     const blob = new Blob([bytes], { type: 'application/pdf' });
@@ -378,10 +365,6 @@ export default function ReceiptModalDB({
           {canShare && (
             <Button variant="outline" onClick={handleShare}><Share2 className="w-4 h-4 mr-2" />Compartilhar</Button>
           )}
-          <Button variant="outline" onClick={handleSaveOnly} disabled={saveReceipt.isPending} title="Salva o recibo na página de Recibos sem baixar">
-            {saveReceipt.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-            Salvar
-          </Button>
           <Button onClick={handleDownload}><Download className="w-4 h-4 mr-2" />Baixar PDF</Button>
         </div>
       </DialogContent>
