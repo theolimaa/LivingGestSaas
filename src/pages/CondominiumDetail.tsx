@@ -34,7 +34,7 @@ import {
   ApartmentDB,
 } from '@/hooks/useApartments';
 import { useTenants } from '@/hooks/useTenants';
-import { useAllFinancialRecords, calcReceived } from '@/hooks/useFinancial';
+import { useAllFinancialRecords, calcReceived, FinancialRecordDB } from '@/hooks/useFinancial';
 import { useContracts } from '@/hooks/useContracts';
  
 function ApartmentModal({
@@ -106,15 +106,7 @@ function ApartmentCard({
   condominiumId: string;
   selectedYear: number;
   selectedMonth: number | null;
-  allFinancialRecords: {
-    apartment_id: string;
-    paid: boolean | null;
-    rent_value: number;
-    month: string;
-    payment_date: string | null;
-    status: string | null;
-    contract_id?: string | null;
-  }[];
+  allFinancialRecords: FinancialRecordDB[];
 }) {
   const navigate = useNavigate();
   const deleteApt = useDeleteApartment();

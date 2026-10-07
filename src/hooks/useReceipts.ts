@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { toast } from 'sonner';
-import { FinancialRecordDB } from './useFinancial';
+import { FinancialRecordDB, fetchAllFinancialRecords } from './useFinancial';
 import { buildReceiptPDF, generateReceiptCode } from '@/lib/generateReceiptPDF';
 
 export interface SavedReceipt {
@@ -240,15 +240,10 @@ export function useBulkSaveReceipts() {
       if (!paidRaw?.length) return { saved: 0, skipped: 0 };
 
       // 2. Busca registros financeiros do usuário para montar o histórico anual
-      const { data: allRec } = await supabase
-        .from('financial_records')
-        .select('*, apartments!inner(condominiums!inner(user_id))')
-        .eq('apartments.condominiums.user_id', user!.id)
-        .order('month', { ascending: true })
-        .limit(50000);
+      const allRec = await fetchAllFinancialRecords(user!.id);
 
       const byApartment: Record<string, FinancialRecordDB[]> = {};
-      for (const r of allRec || []) {
+      for (const r of allRec) {
         if (!byApartment[r.apartment_id]) byApartment[r.apartment_id] = [];
         byApartment[r.apartment_id].push(r);
       }

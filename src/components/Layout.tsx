@@ -51,7 +51,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [financeiroOpen, setFinanceiroOpen] = useState(
     location.pathname.startsWith('/financeiro')
   );
-  const inactivityTimer = useRef<number | null>(null);
+  const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
  
   const resetTimer = useCallback(() => {
     if (inactivityTimer.current) clearTimeout(inactivityTimer.current);

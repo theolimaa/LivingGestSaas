@@ -7,50 +7,15 @@ import { useCondominiums } from '@/hooks/useCondominiums';
 import { useApartments } from '@/hooks/useApartments';
 import { useContracts } from '@/hooks/useContracts';
 import { useTenants, useAllPreviousTenants } from '@/hooks/useTenants';
+import { computeVacancy, fmtDate, type VacancyEntry } from '@/lib/vacancy';
 
-// Vacância = dia sem contrato vigente (início → "Contrato até") no apartamento.
-// Perda do mês = dias vagos ÷ dias do mês × aluguel de referência do apartamento
-// (aluguel do último contrato; sem contrato, média do condomínio).
-// Tudo é calculado a partir dos contratos, então atualiza sozinho quando um contrato muda.
+// Tudo é calculado a partir dos contratos (ver lib/vacancy.ts), então atualiza sozinho quando um contrato muda.
 
-const DAY = 86400000;
 const pad = (n: number) => String(n).padStart(2, '0');
-const toIdx = (s: string) => {
-  const [y, m, d] = s.slice(0, 10).split('-').map(Number);
-  return Math.round(Date.UTC(y, m - 1, d) / DAY);
-};
-const fmtDate = (i: number) => {
-  const d = new Date(i * DAY);
-  return `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
-};
-const daysInMonth = (year: number, m0: number) => new Date(Date.UTC(year, m0 + 1, 0)).getUTCDate();
 const todayKey = () => {
   const n = new Date();
   return `${n.getFullYear()}-${pad(n.getMonth() + 1)}-${pad(n.getDate())}`;
 };
-
-interface VacancyEntry {
-  key: string;
-  gapKey: string;
-  aptId: string;
-  condo: string;
-  unit: string;
-  month: number;
-  from: number;
-  to: number;
-  days: number;
-  dim: number;
-  rent: number;
-  loss: number;
-  ongoing: boolean;
-  reason: string;
-}
-
-function gapReason(prev: string | null, prevEnd: number | null, next: string | null, nextStart: number | null) {
-  const left = prev ? `${prev} saiu${prevEnd !== null ? ` (contrato até ${fmtDate(prevEnd)})` : ''}` : 'sem contrato anterior';
-  const right = next && nextStart !== null ? `${next} entra em ${fmtDate(nextStart)}` : 'sem novo contrato';
-  return `${left}; ${right}`;
-}
 
 export default function VacancyIndex() {
   const [today, setToday] = useState(todayKey());
@@ -75,10 +40,6 @@ export default function VacancyIndex() {
   const year = Number(selectedYear);
 
   const { entries, vacantNow, totalApts } = useMemo(() => {
-    const todayIdx = toIdx(today);
-    const yearStart = toIdx(`${year}-01-01`);
-    const yearEnd = Math.min(toIdx(`${year}-12-31`), todayIdx);
-
     const tenantInfo = new Map<string, { apartmentId: string; name: string }>();
     for (const t of tenants) tenantInfo.set(t.id, { apartmentId: t.apartment_id, name: `${t.first_name} ${t.last_name}`.trim() });
     for (const p of previousTenants) {
@@ -86,77 +47,7 @@ export default function VacancyIndex() {
         tenantInfo.set(p.original_id, { apartmentId: p.apartment_id, name: `${p.first_name} ${p.last_name}`.trim() });
       }
     }
-
-    type Interval = { start: number; end: number; rent: number; name: string };
-    const byApt = new Map<string, Interval[]>();
-    for (const c of contracts) {
-      const info = tenantInfo.get(c.tenant_id);
-      if (!info || !c.start_date) continue;
-      const list = byApt.get(info.apartmentId) ?? [];
-      list.push({ start: toIdx(c.start_date), end: c.end_date ? toIdx(c.end_date) : Infinity, rent: Number(c.rent_value), name: info.name });
-      byApt.set(info.apartmentId, list);
-    }
-
-    const condoAvg = new Map<string, number>();
-    for (const condo of condominiums) {
-      const rents = apartments.filter(a => a.condominium_id === condo.id).flatMap(a => (byApt.get(a.id) ?? []).map(i => i.rent));
-      condoAvg.set(condo.id, rents.length ? rents.reduce((s, r) => s + r, 0) / rents.length : 0);
-    }
-
-    const condoById = new Map(condominiums.map(c => [c.id, c.name]));
-    const aptsInScope = apartments.filter(a => selectedCondo === 'all' || a.condominium_id === selectedCondo);
-    const result: VacancyEntry[] = [];
-
-    if (yearEnd >= yearStart) {
-      for (const apt of aptsInScope) {
-        const intervals = [...(byApt.get(apt.id) ?? [])].sort((a, b) => a.start - b.start);
-        const rent = intervals.length
-          ? intervals[intervals.length - 1].rent
-          : condoAvg.get(apt.condominium_id) ?? 0;
-        const condo = condoById.get(apt.condominium_id) ?? '—';
-
-        const addGap = (gapFrom: number, gapTo: number, prev: string | null, prevEnd: number | null, next: string | null, nextStart: number | null) => {
-          if (gapFrom > gapTo) return;
-          const ongoing = gapTo === yearEnd && yearEnd === todayIdx && (nextStart === null || nextStart > todayIdx);
-          const reason = gapReason(prev, prevEnd, next, nextStart);
-          const firstMonth = new Date(gapFrom * DAY).getUTCMonth();
-          const lastMonth = new Date(gapTo * DAY).getUTCMonth();
-          for (let m = firstMonth; m <= lastMonth; m++) {
-            const dim = daysInMonth(year, m);
-            const mStart = toIdx(`${year}-${pad(m + 1)}-01`);
-            const from = Math.max(gapFrom, mStart);
-            const to = Math.min(gapTo, mStart + dim - 1);
-            const days = to - from + 1;
-            result.push({
-              key: `${apt.id}-${gapFrom}-${m}`, gapKey: `${apt.id}-${gapFrom}`, aptId: apt.id, condo, unit: apt.unit_number, month: m,
-              from, to, days, dim, rent, loss: (days / dim) * rent, ongoing: ongoing && m === lastMonth, reason,
-            });
-          }
-        };
-
-        let cursor = yearStart;
-        let maxEnd = -Infinity;
-        let lastName: string | null = null;
-        let lastEnd: number | null = null;
-        let closed = false;
-        for (const iv of intervals) {
-          if (iv.start > cursor) {
-            addGap(cursor, Math.min(iv.start - 1, yearEnd), lastName, lastEnd, iv.name, iv.start);
-          }
-          if (iv.end >= maxEnd) {
-            maxEnd = iv.end;
-            lastName = iv.name;
-            lastEnd = Number.isFinite(iv.end) ? iv.end : null;
-          }
-          cursor = Math.max(cursor, iv.end + 1);
-          if (cursor > yearEnd) { closed = true; break; }
-        }
-        if (!closed) addGap(cursor, yearEnd, lastName, lastEnd, null, null);
-      }
-    }
-
-    const vacantNow = new Set(result.filter(e => e.ongoing).map(e => e.aptId)).size;
-    return { entries: result, vacantNow, totalApts: aptsInScope.length };
+    return computeVacancy({ year, today, apartments, condominiums, contracts, tenantInfo, condoFilter: selectedCondo });
   }, [today, year, selectedCondo, tenants, previousTenants, contracts, apartments, condominiums]);
 
   const monthlyData = MONTHS.map((label, m) => {

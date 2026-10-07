@@ -6,7 +6,8 @@ import Layout from '@/components/Layout';
 import { formatCurrency, MONTHS, YEARS, getPeriodAndDueDate, computeRecordStatus, getRecordDueDate } from '@/lib/utils-app';
 import { useCondominiums } from '@/hooks/useCondominiums';
 import { useApartments } from '@/hooks/useApartments';
-import { useTenants } from '@/hooks/useTenants';
+import { useTenants, useAllPreviousTenants } from '@/hooks/useTenants';
+import { isVacantAllMonth } from '@/lib/vacancy';
 import { useFinancialRecordsByYear, FinancialRecordDB, calcReceived, calcOwed } from '@/hooks/useFinancial';
 import { useContracts } from '@/hooks/useContracts';
 import jsPDF from 'jspdf';
@@ -69,8 +70,16 @@ export default function MonthlyReport() {
   const { data: allTenants = [] } = useTenants();
   const { data: financialRecords = [], isLoading } = useFinancialRecordsByYear(Number(selectedYear));
   const { data: contracts = [] } = useContracts();
+  const { data: previousTenants = [] } = useAllPreviousTenants();
 
   const monthIndex = Number(selectedMonth); // 0-indexed
+
+  // inquilino → apartamento (ativos e anteriores), para decidir vacância pelo período dos contratos
+  const tenantInfo = new Map<string, { apartmentId: string; name: string }>();
+  for (const t of allTenants) tenantInfo.set(t.id, { apartmentId: t.apartment_id, name: '' });
+  for (const p of previousTenants) {
+    if (p.original_id && p.apartment_id && !tenantInfo.has(p.original_id)) tenantInfo.set(p.original_id, { apartmentId: p.apartment_id, name: '' });
+  }
 
   // ── Enriquecer registros com due date ────────────────────────────────────────
   const enriched = financialRecords.map(r => {
@@ -132,10 +141,10 @@ export default function MonthlyReport() {
           });
         }
 
-        // Sem registro: vago = não tem nenhum tenant ativo (não arquivado) no apartamento
-        const hasActiveTenant = allTenants.some(t => t.apartment_id === apt.id && !t.archived_at);
+        // Sem registro: vago = nenhum contrato vigente no mês do relatório (mesmo critério do Índice de Vacância)
+        const isVacant = isVacantAllMonth(apt.id, Number(selectedYear), monthIndex, contracts, tenantInfo);
 
-        return [{ apt, record: null, tenant: null, status: null, isVacant: !hasActiveTenant }];
+        return [{ apt, record: null, tenant: null, status: null, isVacant }];
       });
 
       const totalPaid = condoRecords.filter(r => r.computedStatus === 'paid').reduce((s, r) => s + calcReceived(r), 0);

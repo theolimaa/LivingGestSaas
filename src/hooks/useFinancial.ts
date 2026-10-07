@@ -81,20 +81,33 @@ export function useFinancialRecords(apartmentId: string) {
   });
 }
 
+const PAGE_SIZE = 1000;
+
+/** Busca todos os registros do usuário em páginas de 1000.
+ *  A API do Supabase corta respostas em `max_rows` (padrão 1000) mesmo com .limit() maior,
+ *  então paginar evita perder linhas em silêncio. O desempate por id mantém a ordem estável. */
+export async function fetchAllFinancialRecords(userId: string): Promise<FinancialRecordDB[]> {
+  const all: FinancialRecordDB[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('financial_records')
+      .select('*, apartments!inner(condominium_id, condominiums!inner(user_id))')
+      .eq('apartments.condominiums.user_id', userId)
+      .order('month', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    all.push(...((data ?? []) as FinancialRecordDB[]));
+    if (!data || data.length < PAGE_SIZE) break;
+  }
+  return all;
+}
+
 export function useAllFinancialRecords() {
   const { user } = useAuth();
   return useQuery({
     queryKey: ['financial_records_all', user?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('financial_records')
-        .select('*, apartments!inner(condominium_id, condominiums!inner(user_id))')
-        .eq('apartments.condominiums.user_id', user!.id)
-        .order('month', { ascending: true })
-        .limit(50000);
-      if (error) throw error;
-      return data as FinancialRecordDB[];
-    },
+    queryFn: () => fetchAllFinancialRecords(user!.id),
     enabled: !!user,
   });
 }

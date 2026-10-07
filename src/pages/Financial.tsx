@@ -408,7 +408,7 @@ export default function Financial() {
           <div className="py-2 space-y-4">
             {paymentModal && (
               <p className="text-xs text-muted-foreground">
-                {paymentModal.record.apt?.unit_number ?? ''} · Contrato: <strong>{formatCurrency(paymentModal.record.rent_value)}</strong>
+                {apartments.find(a => a.id === paymentModal.record.apartment_id)?.unit_number ?? ''} · Contrato: <strong>{formatCurrency(paymentModal.record.rent_value)}</strong>
               </p>
             )}
  

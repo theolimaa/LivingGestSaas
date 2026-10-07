@@ -128,6 +128,9 @@ export type Database = {
       }
       contracts: {
         Row: {
+          caution_date: string | null
+          caution_paid: boolean | null
+          caution_value: number | null
           created_at: string
           desired_payment_date: string | null
           desired_payment_day: number | null
@@ -142,6 +145,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          caution_date?: string | null
+          caution_paid?: boolean | null
+          caution_value?: number | null
           created_at?: string
           desired_payment_date?: string | null
           desired_payment_day?: number | null
@@ -156,6 +162,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          caution_date?: string | null
+          caution_paid?: boolean | null
+          caution_value?: number | null
           created_at?: string
           desired_payment_date?: string | null
           desired_payment_day?: number | null
@@ -175,6 +184,110 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      debt_agreements: {
+        Row: {
+          agreed_amount: number
+          apartment_id: string | null
+          created_at: string | null
+          id: string
+          installment_count: number
+          installment_value: number
+          notes: string | null
+          original_amount: number
+          previous_tenant_id: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          agreed_amount: number
+          apartment_id?: string | null
+          created_at?: string | null
+          id?: string
+          installment_count?: number
+          installment_value: number
+          notes?: string | null
+          original_amount: number
+          previous_tenant_id?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          agreed_amount?: number
+          apartment_id?: string | null
+          created_at?: string | null
+          id?: string
+          installment_count?: number
+          installment_value?: number
+          notes?: string | null
+          original_amount?: number
+          previous_tenant_id?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "debt_agreements_apartment_id_fkey"
+            columns: ["apartment_id"]
+            isOneToOne: false
+            referencedRelation: "apartments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "debt_agreements_previous_tenant_id_fkey"
+            columns: ["previous_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "previous_tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      debt_installments: {
+        Row: {
+          agreement_id: string | null
+          amount: number
+          created_at: string | null
+          due_date: string | null
+          id: string
+          installment_number: number
+          notes: string | null
+          paid: boolean | null
+          payment_date: string | null
+          payment_method: string | null
+        }
+        Insert: {
+          agreement_id?: string | null
+          amount: number
+          created_at?: string | null
+          due_date?: string | null
+          id?: string
+          installment_number: number
+          notes?: string | null
+          paid?: boolean | null
+          payment_date?: string | null
+          payment_method?: string | null
+        }
+        Update: {
+          agreement_id?: string | null
+          amount?: number
+          created_at?: string | null
+          due_date?: string | null
+          id?: string
+          installment_number?: number
+          notes?: string | null
+          paid?: boolean | null
+          payment_date?: string | null
+          payment_method?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "debt_installments_agreement_id_fkey"
+            columns: ["agreement_id"]
+            isOneToOne: false
+            referencedRelation: "debt_agreements"
             referencedColumns: ["id"]
           },
         ]
@@ -219,11 +332,16 @@ export type Database = {
           apartment_id: string
           contract_id: string | null
           created_at: string | null
+          debt_paid_amount: number | null
+          debt_payment_date: string | null
+          debt_payment_method: string | null
           id: string
           month: string
           observations: string | null
           paid: boolean | null
+          paid_amount: number | null
           payment_date: string | null
+          payment_method: string | null
           receipt_generated_at: string | null
           receipt_number: string | null
           rent_value: number
@@ -235,11 +353,16 @@ export type Database = {
           apartment_id: string
           contract_id?: string | null
           created_at?: string | null
+          debt_paid_amount?: number | null
+          debt_payment_date?: string | null
+          debt_payment_method?: string | null
           id?: string
           month: string
           observations?: string | null
           paid?: boolean | null
+          paid_amount?: number | null
           payment_date?: string | null
+          payment_method?: string | null
           receipt_generated_at?: string | null
           receipt_number?: string | null
           rent_value?: number
@@ -251,11 +374,16 @@ export type Database = {
           apartment_id?: string
           contract_id?: string | null
           created_at?: string | null
+          debt_paid_amount?: number | null
+          debt_payment_date?: string | null
+          debt_payment_method?: string | null
           id?: string
           month?: string
           observations?: string | null
           paid?: boolean | null
+          paid_amount?: number | null
           payment_date?: string | null
+          payment_method?: string | null
           receipt_generated_at?: string | null
           receipt_number?: string | null
           rent_value?: number
@@ -373,9 +501,93 @@ export type Database = {
           },
         ]
       }
+      saved_receipts: {
+        Row: {
+          apartment_id: string
+          apartment_unit: string
+          condominium_name: string
+          contract_id: string | null
+          financial_record_id: string
+          id: string
+          month: string
+          payment_date: string | null
+          public_url: string
+          receipt_code: string
+          saved_at: string | null
+          storage_path: string
+          tenant_id: string | null
+          tenant_name: string
+          user_id: string
+        }
+        Insert: {
+          apartment_id: string
+          apartment_unit: string
+          condominium_name: string
+          contract_id?: string | null
+          financial_record_id: string
+          id?: string
+          month: string
+          payment_date?: string | null
+          public_url: string
+          receipt_code: string
+          saved_at?: string | null
+          storage_path: string
+          tenant_id?: string | null
+          tenant_name: string
+          user_id: string
+        }
+        Update: {
+          apartment_id?: string
+          apartment_unit?: string
+          condominium_name?: string
+          contract_id?: string | null
+          financial_record_id?: string
+          id?: string
+          month?: string
+          payment_date?: string | null
+          public_url?: string
+          receipt_code?: string
+          saved_at?: string | null
+          storage_path?: string
+          tenant_id?: string | null
+          tenant_name?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_receipts_apartment_id_fkey"
+            columns: ["apartment_id"]
+            isOneToOne: false
+            referencedRelation: "apartments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_receipts_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_receipts_financial_record_id_fkey"
+            columns: ["financial_record_id"]
+            isOneToOne: false
+            referencedRelation: "financial_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "saved_receipts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenants: {
         Row: {
           apartment_id: string
+          archived_at: string | null
           birth_date: string | null
           cpf: string | null
           created_at: string
@@ -388,6 +600,7 @@ export type Database = {
         }
         Insert: {
           apartment_id: string
+          archived_at?: string | null
           birth_date?: string | null
           cpf?: string | null
           created_at?: string
@@ -400,6 +613,7 @@ export type Database = {
         }
         Update: {
           apartment_id?: string
+          archived_at?: string | null
           birth_date?: string | null
           cpf?: string | null
           created_at?: string
