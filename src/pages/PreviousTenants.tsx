@@ -88,6 +88,8 @@ export default function PreviousTenants() {
 
   const [search, setSearch] = useState('');
   const [filterCondo, setFilterCondo] = useState<string>('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [filterStatus, setFilterStatus] = useState<'aberto' | 'devendo' | 'acordo' | 'quitado' | 'all'>('aberto');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -130,6 +132,13 @@ export default function PreviousTenants() {
     const name = `${pt.first_name} ${pt.last_name}`.toLowerCase();
     if (search && !name.includes(search.toLowerCase()) && !pt.apt?.unit_number.toLowerCase().includes(search.toLowerCase())) return false;
     if (filterCondo !== 'all' && pt.condo?.id !== filterCondo) return false;
+    // Data de saída do inquilino (mesma usada em "Saiu em")
+    if (dateFrom || dateTo) {
+      const exitDate = pt.archived_at?.split('T')[0];
+      if (!exitDate) return false;
+      if (dateFrom && exitDate < dateFrom) return false;
+      if (dateTo && exitDate > dateTo) return false;
+    }
     const hasDebt = pt.totalOwed > 0 || pt.hasActiveAgreement;
     if (filterStatus === 'aberto'   && !hasDebt) return false;
     if (filterStatus === 'devendo'  && !(hasDebt && !pt.hasActiveAgreement)) return false;
@@ -294,6 +303,21 @@ export default function PreviousTenants() {
                 {condominiums.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Filtro por data de saída */}
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-muted-foreground text-xs font-medium">Saiu entre</span>
+            <Input type="date" className="w-40" value={dateFrom} max={dateTo || undefined}
+              onChange={e => setDateFrom(e.target.value)} aria-label="Saída a partir de" />
+            <span className="text-muted-foreground text-xs">e</span>
+            <Input type="date" className="w-40" value={dateTo} min={dateFrom || undefined}
+              onChange={e => setDateTo(e.target.value)} aria-label="Saída até" />
+            {(dateFrom || dateTo) && (
+              <Button variant="ghost" size="sm" onClick={() => { setDateFrom(''); setDateTo(''); }}>
+                Limpar datas
+              </Button>
+            )}
           </div>
 
           {/* Pills de status */}
