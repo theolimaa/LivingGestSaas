@@ -65,6 +65,8 @@ export default {
           DEFAULT: "hsl(var(--warning))",
           foreground: "hsl(var(--warning-foreground))",
         },
+        paid: "hsl(var(--paid))",
+        overdue: "hsl(var(--overdue))",
       },
       borderRadius: {
         lg: "var(--radius)",

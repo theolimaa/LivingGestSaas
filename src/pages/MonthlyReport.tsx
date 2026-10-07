@@ -445,7 +445,7 @@ export default function MonthlyReport() {
                       <tr key={row.record?.id ?? row.apt.id} className="border-b border-border/50 last:border-0">
                         <td className="px-3 py-2 font-medium">
                           {row.apt.unit_number}
-                          {row.record && <span className="block text-[10px] font-normal text-muted-foreground">ref. {formatMonthLabel(row.record.month)}</span>}
+                          {row.record && <span className="block text-xs font-normal text-muted-foreground">ref. {formatMonthLabel(row.record.month)}</span>}
                         </td>
                         <td className="px-3 py-2 text-muted-foreground hidden sm:table-cell">
                           {row.tenant ? `${row.tenant.first_name} ${row.tenant.last_name}` : '—'}

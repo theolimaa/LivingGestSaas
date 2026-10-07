@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useTheme } from '@/hooks/useTheme';
+import { Moon, Sun } from 'lucide-react';
 import { Save, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +11,7 @@ import { toast } from 'sonner';
 import Layout from '@/components/Layout';
 
 export default function Profile() {
+  const { theme, toggle: toggleTheme } = useTheme();
   const { user } = useAuth();
   const [form, setForm] = useState({
     username: user?.user_metadata?.username || '',
@@ -52,9 +55,9 @@ export default function Profile() {
 
   return (
     <Layout>
-      <div className="p-6 max-w-xl">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold">Meu Perfil</h1>
+      <div className="page-content !mx-0 max-w-xl">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Meu Perfil</h1>
           <p className="text-muted-foreground text-sm">Gerencie suas informações pessoais</p>
         </div>
         <div className="bg-card rounded-xl border border-border p-6">
@@ -82,11 +85,11 @@ export default function Profile() {
               <div className="space-y-3">
                 <div>
                   <Label>Nova Senha</Label>
-                  <Input className="mt-1" type="password" placeholder="Nova senha (mín. 6 caracteres)" value={form.newPassword} onChange={e => setForm({ ...form, newPassword: e.target.value })} />
+                  <Input className="mt-1" type="password" autoComplete="new-password" placeholder="Nova senha (mín. 6 caracteres)" value={form.newPassword} onChange={e => setForm({ ...form, newPassword: e.target.value })} />
                 </div>
                 <div>
                   <Label>Confirmar Nova Senha</Label>
-                  <Input className="mt-1" type="password" placeholder="Confirme a nova senha" value={form.confirmPassword} onChange={e => setForm({ ...form, confirmPassword: e.target.value })} />
+                  <Input className="mt-1" type="password" autoComplete="new-password" placeholder="Confirme a nova senha" value={form.confirmPassword} onChange={e => setForm({ ...form, confirmPassword: e.target.value })} />
                 </div>
               </div>
             </div>
@@ -95,6 +98,16 @@ export default function Profile() {
               {loading ? 'Salvando...' : 'Salvar Alterações'}
             </Button>
           </form>
+        </div>
+        <div className="bg-card rounded-xl border border-border p-6 flex items-center justify-between gap-4">
+          <div>
+            <p className="font-semibold">Aparência</p>
+            <p className="text-sm text-muted-foreground">Tema {theme === 'dark' ? 'escuro' : 'claro'}</p>
+          </div>
+          <Button type="button" variant="outline" onClick={toggleTheme}>
+            {theme === 'dark' ? <Sun className="w-4 h-4 mr-2" /> : <Moon className="w-4 h-4 mr-2" />}
+            {theme === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'}
+          </Button>
         </div>
       </div>
     </Layout>

@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ConfirmDialog } from '@/components/app/ConfirmDialog';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -156,6 +157,7 @@ function AgreementCard({
   const { user } = useAuth();
   const adminName = user?.user_metadata?.username || user?.email?.split('@')[0] || 'Administrador';
   const [expanded, setExpanded] = useState(true);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [editModal, setEditModal] = useState(false);
   const [editNotes, setEditNotes] = useState(agreement.notes ?? '');
   const [editAgreedAmount, setEditAgreedAmount] = useState(String(agreement.agreed_amount));
@@ -276,10 +278,7 @@ function AgreementCard({
             {/* Excluir: apenas acordos cancelados ou quitados */}
             {(agreement.status === 'cancelled' || agreement.status === 'settled') && (
               <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-destructive hover:text-destructive"
-                onClick={() => {
-                  if (!window.confirm('Excluir este acordo e todas as suas parcelas? Essa ação não pode ser desfeita.')) return;
-                  deleteAgreement.mutate({ id: agreement.id, previousTenantId });
-                }}
+                onClick={() => setConfirmDelete(true)}
                 disabled={deleteAgreement.isPending}>
                 <Trash2 className="w-3 h-3" /> Excluir
               </Button>
@@ -324,6 +323,15 @@ function AgreementCard({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Excluir este acordo?"
+        description="O acordo e todas as suas parcelas serão excluídos. Essa ação não pode ser desfeita."
+        confirmLabel="Excluir"
+        destructive
+        onConfirm={() => { setConfirmDelete(false); deleteAgreement.mutate({ id: agreement.id, previousTenantId }); }}
+      />
     </div>
   );
 }

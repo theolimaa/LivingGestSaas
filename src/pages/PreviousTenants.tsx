@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
+import { ConfirmDialog } from '@/components/app/ConfirmDialog';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -44,6 +45,7 @@ function Badge({ children, color }: { children: React.ReactNode; color: 'red' | 
 }
 
 export default function PreviousTenants() {
+  const [confirmDeleteRecord, setConfirmDeleteRecord] = useState(false);
   const { data: previousTenants = [], isLoading: loadingTenants } = useAllPreviousTenants();
   const { data: apartments = [] } = useApartments();
   const { data: condominiums = [] } = useCondominiums();
@@ -207,7 +209,7 @@ export default function PreviousTenants() {
 
   async function handleDeleteRecord() {
     if (!editModal) return;
-    if (!window.confirm('Excluir este registro financeiro? Essa ação não pode ser desfeita.')) return;
+    setConfirmDeleteRecord(false);
     await deleteRecord.mutateAsync({ id: editModal.record.id, apartmentId: editModal.record.apartment_id });
     setEditModal(null);
   }
@@ -714,7 +716,7 @@ export default function PreviousTenants() {
           )}
           <DialogFooter className="sm:justify-between">
             <Button variant="outline" className="text-destructive hover:text-destructive gap-1"
-              onClick={handleDeleteRecord} disabled={deleteRecord.isPending}>
+              onClick={() => setConfirmDeleteRecord(true)} disabled={deleteRecord.isPending}>
               <Trash2 className="w-4 h-4" /> Excluir
             </Button>
             <div className="flex gap-2">
@@ -727,6 +729,15 @@ export default function PreviousTenants() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <ConfirmDialog
+        open={confirmDeleteRecord}
+        onOpenChange={setConfirmDeleteRecord}
+        title="Excluir este registro financeiro?"
+        description="Essa ação não pode ser desfeita."
+        confirmLabel="Excluir"
+        destructive
+        onConfirm={handleDeleteRecord}
+      />
     </Layout>
   );
 }

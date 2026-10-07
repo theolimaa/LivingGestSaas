@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AppProvider } from "@/lib/store";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { useSessionTimeout } from "@/hooks/useSessionTimeout";
+import { AppShell } from "@/components/Layout";
 import Login from "./pages/auth/Login";
 
 // Páginas carregadas sob demanda: o primeiro acesso baixa só o necessário (jsPDF, recharts etc. ficam fora do bundle inicial)
@@ -70,18 +71,20 @@ function AppRoutes() {
       <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
       <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
       <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-      <Route path="/condominios" element={<ProtectedRoute><Condominiums /></ProtectedRoute>} />
-      <Route path="/financeiro" element={<ProtectedRoute><Financial /></ProtectedRoute>} />
-      <Route path="/financeiro/relatorio" element={<ProtectedRoute><MonthlyReport /></ProtectedRoute>} />
-      <Route path="/financeiro/vacancia" element={<ProtectedRoute><VacancyIndex /></ProtectedRoute>} />
-      <Route path="/recibos" element={<ProtectedRoute><Receipts /></ProtectedRoute>} />
-      <Route path="/documentos" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
-      <Route path="/condominiums/:id" element={<ProtectedRoute><CondominiumDetail /></ProtectedRoute>} />
-      <Route path="/apartments/:id" element={<ProtectedRoute><ApartmentDetail /></ProtectedRoute>} />
-      <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-      <Route path="/anteriores" element={<ProtectedRoute><PreviousTenants /></ProtectedRoute>} />
-      <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+      <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/condominios" element={<Condominiums />} />
+        <Route path="/financeiro" element={<Financial />} />
+        <Route path="/financeiro/relatorio" element={<MonthlyReport />} />
+        <Route path="/financeiro/vacancia" element={<VacancyIndex />} />
+        <Route path="/recibos" element={<Receipts />} />
+        <Route path="/documentos" element={<Documents />} />
+        <Route path="/condominiums/:id" element={<CondominiumDetail />} />
+        <Route path="/apartments/:id" element={<ApartmentDetail />} />
+        <Route path="/profile" element={<Profile />} />
+        <Route path="/anteriores" element={<PreviousTenants />} />
+        <Route path="/" element={<Home />} />
+      </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>
     </Suspense>

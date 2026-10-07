@@ -107,6 +107,12 @@
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* iOS dá zoom ao focar campos com fonte < 16px */
+  @media (max-width: 767px) {
+    input, select, textarea { font-size: 16px !important; }
   }
  
   /* Scrollbar */
@@ -132,10 +138,9 @@
   }
  
   .sidebar-nav-item.active {
-    background: linear-gradient(135deg, hsl(var(--sidebar-primary) / 0.25) 0%, hsl(var(--sidebar-primary) / 0.15) 100%);
+    background: hsl(var(--sidebar-primary) / 0.18);
     color: hsl(217 91% 72%);
     border: 1px solid hsl(var(--sidebar-primary) / 0.2);
-    box-shadow: 0 1px 4px hsl(var(--sidebar-primary) / 0.12);
   }
  
   /* ─── STAT CARDS ──────────────────────────────────────────────── */
@@ -144,14 +149,6 @@
     @apply bg-card rounded-xl border border-border p-5 relative overflow-hidden;
     box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.04);
     transition: box-shadow 0.2s ease, transform 0.2s ease;
-  }
- 
-  .stat-card::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(135deg, hsl(var(--card)) 0%, hsl(var(--muted) / 0.3) 100%);
-    pointer-events: none;
   }
  
   .stat-card:hover {
@@ -182,6 +179,15 @@
     border: 1px solid hsl(var(--overdue) / 0.2);
   }
  
+  .badge-pending {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
+    background: hsl(var(--warning) / 0.12);
+    color: hsl(37 90% 33%);
+    border: 1px solid hsl(var(--warning) / 0.3);
+  }
+
+  .dark .badge-pending { color: hsl(var(--warning)); }
+
   .badge-active {
     @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
     background: hsl(var(--paid) / 0.1);
@@ -246,25 +252,25 @@
   }
  
   .icon-badge-primary {
-    background: linear-gradient(135deg, hsl(var(--primary) / 0.15) 0%, hsl(var(--primary) / 0.08) 100%);
+    background: hsl(var(--primary) / 0.1);
     color: hsl(var(--primary));
     border: 1px solid hsl(var(--primary) / 0.15);
   }
  
   .icon-badge-success {
-    background: linear-gradient(135deg, hsl(var(--paid) / 0.15) 0%, hsl(var(--paid) / 0.08) 100%);
+    background: hsl(var(--paid) / 0.1);
     color: hsl(var(--paid));
     border: 1px solid hsl(var(--paid) / 0.15);
   }
  
   .icon-badge-warning {
-    background: linear-gradient(135deg, hsl(var(--warning) / 0.15) 0%, hsl(var(--warning) / 0.08) 100%);
+    background: hsl(var(--warning) / 0.1);
     color: hsl(var(--warning));
     border: 1px solid hsl(var(--warning) / 0.15);
   }
  
   .icon-badge-danger {
-    background: linear-gradient(135deg, hsl(var(--overdue) / 0.15) 0%, hsl(var(--overdue) / 0.08) 100%);
+    background: hsl(var(--overdue) / 0.1);
     color: hsl(var(--overdue));
     border: 1px solid hsl(var(--overdue) / 0.15);
   }
@@ -324,7 +330,7 @@
  
 /* ─── SIDEBAR LOGO GRADIENT ───────────────────────────────────────── */
 .sidebar-logo-gradient {
-  background: linear-gradient(135deg, hsl(217 91% 55%) 0%, hsl(238 83% 62%) 100%);
+  background: hsl(var(--primary));
 }
  
 /* ─── STAT CARD ACCENT LINES ──────────────────────────────────────── */
@@ -425,3 +431,15 @@ a.underline-hover:hover::after {
   background: hsl(var(--sidebar-background));
 }
  
+
+/* ─── ACESSIBILIDADE / MOVIMENTO ──────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─── BARRA INFERIOR (MOBILE) ─────────────────────────────────────── */
+.bottom-nav-safe { padding-bottom: env(safe-area-inset-bottom); }

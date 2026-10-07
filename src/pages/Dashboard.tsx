@@ -146,9 +146,9 @@ function DetailModal({ open, onClose, title, records, tenants, apartments, condo
                       </td>
                       <td className="px-3 py-2.5 text-sm hidden md:table-cell">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          getDescription(r) === 'Caução'  ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400' :
-                          getDescription(r) === 'Acordo'  ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400' :
-                          getDescription(r) === 'Parcial' ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400' :
+                          getDescription(r) === 'Caução'  ? 'bg-accent text-accent-foreground' :
+                          getDescription(r) === 'Acordo'  ? 'bg-primary/10 text-primary' :
+                          getDescription(r) === 'Parcial' ? 'bg-warning/15 text-warning' :
                           'bg-muted text-muted-foreground'
                         }`}>{getDescription(r)}</span>
                       </td>

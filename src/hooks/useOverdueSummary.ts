@@ -11,6 +11,7 @@ export interface OverdueSummaryItem {
   condominiumName: string;
   aptUnit: string;
   tenantName: string;
+  tenantPhone: string | null;
   totalOverdue: number;
   daysOverdue: number;
   oldestDueDate: string;
@@ -58,6 +59,7 @@ export function useOverdueSummary() {
         condominiumName: condo?.name ?? '',
         aptUnit: apt.unit_number,
         tenantName: `${tenant.first_name} ${tenant.last_name}`,
+        tenantPhone: tenant.phone,
         totalOverdue: r.rent_value,
         daysOverdue: 0,
         oldestDueDate: dueDateStr,
