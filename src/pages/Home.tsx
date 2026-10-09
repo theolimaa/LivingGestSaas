@@ -9,8 +9,12 @@ import { useApartments } from '@/hooks/useApartments';
 import { useTenants } from '@/hooks/useTenants';
 import { useAllFinancialRecords, calcReceived } from '@/hooks/useFinancial';
 import { useOverdueSummary } from '@/hooks/useOverdueSummary';
-import { formatCurrency } from '@/lib/utils-app';
+import { useContracts } from '@/hooks/useContracts';
+import { useAllDebtInstallments } from '@/hooks/useDebtAgreements';
+import { formatCurrency, MONTHS } from '@/lib/utils-app';
 import { whatsappLink } from '@/lib/whatsapp';
+import { useApp } from '@/lib/store';
+import GlobalFilter from '@/components/GlobalFilter';
 
 function getGreeting(): string {
   const h = new Date().getHours();
@@ -29,16 +33,37 @@ export default function Home() {
   const { data: apartments = [], isLoading: l2 } = useApartments();
   const { data: allTenants = [], isLoading: l3 } = useTenants();
   const { data: financialRecords = [], isLoading: l4 } = useAllFinancialRecords();
-  const { items: overdueItems, totalCount: overdueCount, totalValue: overdueValue, isLoading: l5 } = useOverdueSummary();
-  const loading = l1 || l2 || l3 || l4 || l5;
+  const { state } = useApp();
+  const { items: overdueItems, records: overdueRecords, isLoading: l5 } = useOverdueSummary();
+  const { data: contracts = [], isLoading: l6 } = useContracts();
+  const { data: debtInstallments = [], isLoading: l7 } = useAllDebtInstallments();
+  const loading = l1 || l2 || l3 || l4 || l5 || l6 || l7;
 
   const userName = user?.user_metadata?.username || user?.email?.split('@')[0] || 'Administrador';
 
   const now = new Date();
-  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const recebidoMes = financialRecords
+  // Filtro de período compartilhado com o Painel (mês específico ou ano inteiro)
+  const { selectedYear, selectedMonth } = state;
+  const monthKey = selectedMonth !== null
+    ? `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`
+    : String(selectedYear);
+  const periodLabel = selectedMonth !== null ? `${MONTHS[selectedMonth]} ${selectedYear}` : String(selectedYear);
+  // Mesma composição do Painel: aluguéis + cauções + parcelas de acordos pagas no período
+  const rentReceived = financialRecords
     .filter(r => r.paid && r.payment_date?.startsWith(monthKey))
     .reduce((s, r) => s + calcReceived(r), 0);
+  const cautionReceived = contracts
+    .filter(c => c.caution_paid && c.caution_date?.startsWith(monthKey) && c.caution_value > 0)
+    .reduce((s, c) => s + c.caution_value, 0);
+  const installmentsReceived = debtInstallments
+    .filter(i => i.paid && i.payment_date?.startsWith(monthKey))
+    .reduce((s, i) => s + i.amount, 0);
+  const recebidoMes = rentReceived + cautionReceived + installmentsReceived;
+
+  // Inadimplência do período (por vencimento), agrupada por apartamento
+  const periodOverdue = overdueRecords.filter(r => r.dueDate.startsWith(monthKey));
+  const overdueCount = new Set(periodOverdue.map(r => r.apartmentId)).size;
+  const overdueValue = periodOverdue.reduce((s, r) => s + r.value, 0);
 
   const occupiedCount = apartments.filter(a => allTenants.some(t => t.apartment_id === a.id)).length;
   const vacantCount = apartments.length - occupiedCount;
@@ -66,10 +91,15 @@ export default function Home() {
           <p className="text-muted-foreground text-sm mt-0.5 capitalize">{dateLabel}</p>
         </div>
 
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-medium text-muted-foreground">Indicadores — {periodLabel}</p>
+          <GlobalFilter />
+        </div>
+
         {/* Indicadores */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="bg-card rounded-xl border border-border p-4">
-            <p className="text-xs text-muted-foreground mb-1">Recebido esse mês</p>
+            <p className="text-xs text-muted-foreground mb-1">Recebido no período</p>
             {loading ? (
               <Skeleton className="h-7 w-32" />
             ) : (
@@ -95,7 +125,7 @@ export default function Home() {
                 : 'bg-card border-border hover:border-primary/40'
             }`}
           >
-            <p className="text-xs text-muted-foreground mb-1">Inadimplência</p>
+            <p className="text-xs text-muted-foreground mb-1">Inadimplência no período</p>
             {loading ? (
               <Skeleton className="h-7 w-40" />
             ) : (

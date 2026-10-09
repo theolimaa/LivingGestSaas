@@ -32,6 +32,8 @@ export function useOverdueSummary() {
   const isLoading = l1 || l2 || l3 || l4 || l5;
 
   const byApartment = new Map<string, OverdueSummaryItem>();
+  // Registros individuais em atraso (vencimento + valor), pra filtrar por período
+  const records: { apartmentId: string; dueDate: string; value: number }[] = [];
 
   for (const r of financialRecords) {
     if (r.paid) continue;
@@ -47,6 +49,8 @@ export function useOverdueSummary() {
     if (!tenant) continue;
     const condo = condominiums.find(c => c.id === apt.condominium_id);
     const dueDateStr = getRecordDueDate(r.month, contract?.start_date, contract?.payment_day, contract?.desired_payment_day, contract?.desired_payment_date);
+
+    records.push({ apartmentId: apt.id, dueDate: dueDateStr, value: r.rent_value });
 
     const existing = byApartment.get(apt.id);
     if (existing) {
@@ -81,6 +85,7 @@ export function useOverdueSummary() {
 
   return {
     items,
+    records,
     totalCount: items.length,
     totalValue: items.reduce((s, i) => s + i.totalOverdue, 0),
     isLoading,
