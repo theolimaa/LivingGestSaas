@@ -590,7 +590,7 @@ export default function Dashboard() {
             onClick={() => setOverdueModal(true)}
           >
             <div className="flex items-center justify-between mb-3 relative z-10">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Inadimplente</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Inadimplente do período</p>
               <div className="icon-badge icon-badge-danger">
                 <TrendingDown className="w-4 h-4" />
               </div>

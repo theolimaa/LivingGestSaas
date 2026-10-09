@@ -95,7 +95,7 @@ export default function Home() {
                 : 'bg-card border-border hover:border-primary/40'
             }`}
           >
-            <p className="text-xs text-muted-foreground mb-1">Inadimplência</p>
+            <p className="text-xs text-muted-foreground mb-1">Inadimplência (total)</p>
             {loading ? (
               <Skeleton className="h-7 w-40" />
             ) : (
