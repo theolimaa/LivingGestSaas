@@ -10,6 +10,7 @@ create table if not exists public.parking_settings (
   moto_spots integer not null default 0,
   spot_length numeric,
   spot_width numeric,
+  spot_ranges jsonb not null default '[]'::jsonb, -- [{ "from": 1, "to": 5, "type": "moto|car" }]
   custom_fields jsonb not null default '[]'::jsonb, -- [{ "key": "...", "label": "...", "type": "text|number|yesno" }]
   updated_at timestamptz not null default now()
 );

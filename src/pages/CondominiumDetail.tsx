@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, ChevronLeft, Home, Pencil, Trash2, User, Search, X } from 'lucide-react';
+import { Plus, ChevronLeft, Home, Pencil, Trash2, User, Search, X, LayoutGrid, Rows3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -38,6 +38,7 @@ import { useAllFinancialRecords, calcReceived, FinancialRecordDB } from '@/hooks
 import { useContracts } from '@/hooks/useContracts';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ParkingTab from '@/components/condominium/ParkingTab';
+import ApartmentMap from '@/components/condominium/ApartmentMap';
 
 function ApartmentModal({
   open,
@@ -97,6 +98,40 @@ function ApartmentModal({
   );
 }
  
+type ContractsList = NonNullable<ReturnType<typeof useContracts>['data']>;
+
+function calcAptStats(
+  aptId: string,
+  allFinancialRecords: FinancialRecordDB[],
+  contracts: ContractsList,
+  selectedYear: number,
+  selectedMonth: number | null,
+) {
+  // ✅ CORREÇÃO: receita usa payment_date; inadimplência usa month
+  const received = allFinancialRecords
+    .filter(r => {
+      if (r.apartment_id !== aptId || !r.paid || !r.payment_date) return false;
+      const [y, m] = r.payment_date.split('-').map(Number);
+      return y === selectedYear && (selectedMonth === null || m - 1 === selectedMonth);
+    })
+    .reduce((s, r) => s + calcReceived(r), 0);
+
+  const overdue = allFinancialRecords.some(r => {
+    if (r.apartment_id !== aptId || r.paid) return false;
+    const contract = contracts.find(c => c.id === r.contract_id);
+    // Contratos encerrados nao contam como inadimplentes
+    if (contract?.status === 'ended') return false;
+    // Filtrar pela data de VENCIMENTO (nao por r.month), igual ao Financial e Dashboard
+    const { dueDateStr } = getPeriodAndDueDate(r.month, contract?.start_date ?? null, contract?.payment_day ?? 1, contract?.desired_payment_day, contract?.desired_payment_date);
+    if (!dueDateStr || dueDateStr === '-') return false;
+    const [y, m] = dueDateStr.split('-').map(Number);
+    if (!(y === selectedYear && (selectedMonth === null || m - 1 === selectedMonth))) return false;
+    return getRecordStatus(r.month, contract?.payment_day, contract?.start_date, contract?.desired_payment_day, contract?.desired_payment_date) === 'overdue';
+  });
+
+  return { received, overdue };
+}
+
 function ApartmentCard({
   apt,
   condominiumId,
@@ -117,29 +152,8 @@ function ApartmentCard({
   const { data: tenants = [] } = useTenants(apt.id);
   const { data: contracts = [] } = useContracts();
   const currentTenant = tenants[0];
- 
-  // ✅ CORREÇÃO: receita usa payment_date; inadimplência usa month
-  const received = allFinancialRecords
-    .filter(r => {
-      if (r.apartment_id !== apt.id || !r.paid || !r.payment_date) return false;
-      const [y, m] = r.payment_date.split('-').map(Number);
-      return y === selectedYear && (selectedMonth === null || m - 1 === selectedMonth);
-    })
-    .reduce((s, r) => s + calcReceived(r), 0);
- 
-  const overdue = allFinancialRecords.some(r => {
-    if (r.apartment_id !== apt.id || r.paid) return false;
-    const contract = contracts.find(c => c.id === r.contract_id);
-    // Contratos encerrados nao contam como inadimplentes
-    if (contract?.status === 'ended') return false;
-    // Filtrar pela data de VENCIMENTO (nao por r.month), igual ao Financial e Dashboard
-    const { dueDateStr } = getPeriodAndDueDate(r.month, contract?.start_date ?? null, contract?.payment_day ?? 1, contract?.desired_payment_day, contract?.desired_payment_date);
-    if (!dueDateStr || dueDateStr === '-') return false;
-    const [y, m] = dueDateStr.split('-').map(Number);
-    if (!(y === selectedYear && (selectedMonth === null || m - 1 === selectedMonth))) return false;
-    return getRecordStatus(r.month, contract?.payment_day, contract?.start_date, contract?.desired_payment_day, contract?.desired_payment_date) === 'overdue';
-  });
- 
+  const { received, overdue } = calcAptStats(apt.id, allFinancialRecords, contracts, selectedYear, selectedMonth);
+
   return (
     <>
       <div
@@ -244,10 +258,12 @@ export default function CondominiumDetail() {
   const navigate = useNavigate();
   const { state } = useApp();
   const [showAdd, setShowAdd] = useState(false);
+  const [aptView, setAptView] = useState<'map' | 'cards'>('map');
  
   const { data: condominiums = [] } = useCondominiums();
   const { data: apartments = [], isLoading } = useApartments(id);
   const { data: allFinancialRecords = [] } = useAllFinancialRecords();
+  const { data: contracts = [] } = useContracts();
  
   const cond = condominiums.find(c => c.id === id);
   const { selectedYear, selectedMonth } = state;
@@ -268,6 +284,17 @@ export default function CondominiumDetail() {
         return false;
       })
     : condApts;
+  const mapItems = filteredApts.map(apt => {
+    const t = allTenants.find(x => x.apartment_id === apt.id);
+    const { received, overdue } = calcAptStats(apt.id, allFinancialRecords, contracts, selectedYear, selectedMonth);
+    return {
+      id: apt.id,
+      unitNumber: apt.unit_number,
+      tenantName: t ? `${t.first_name} ${t.last_name}`.trim() : null,
+      overdue,
+      received,
+    };
+  });
   const totalReceived = allFinancialRecords
     .filter(r => {
       if (!condApts.some(a => a.id === r.apartment_id)) return false;
@@ -362,7 +389,8 @@ export default function CondominiumDetail() {
         </div>
         {/* Search bar */}
         {!isLoading && condApts.length > 0 && (
-          <div className="relative">
+          <div className="flex items-center gap-2">
+          <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
             <Input
               className="pl-9 pr-9"
@@ -378,6 +406,15 @@ export default function CondominiumDetail() {
                 <X className="w-4 h-4" />
               </button>
             )}
+          </div>
+          <div className="inline-flex rounded-md border border-border p-0.5 shrink-0">
+            <Button type="button" size="sm" variant={aptView === 'map' ? 'secondary' : 'ghost'} className="gap-1.5 h-8" onClick={() => setAptView('map')}>
+              <LayoutGrid className="w-4 h-4" /> <span className="hidden sm:inline">Mapa</span>
+            </Button>
+            <Button type="button" size="sm" variant={aptView === 'cards' ? 'secondary' : 'ghost'} className="gap-1.5 h-8" onClick={() => setAptView('cards')}>
+              <Rows3 className="w-4 h-4" /> <span className="hidden sm:inline">Cards</span>
+            </Button>
+          </div>
           </div>
         )}
 
@@ -406,6 +443,8 @@ export default function CondominiumDetail() {
               Limpar busca
             </button>
           </div>
+        ) : aptView === 'map' ? (
+          <ApartmentMap items={mapItems} />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
             {filteredApts.map(apt => (

@@ -4,11 +4,12 @@
 -- Apartamentos marcados XXX na planilha (sem veículo) não geram registro.
 -- ============================================================
 
-insert into public.parking_settings (condominium_id, car_spots, moto_spots, spot_length, spot_width)
-select id, 9, 12, 5.00, 2.20 from public.condominiums where name = 'Roseno Lopes'
+insert into public.parking_settings (condominium_id, car_spots, moto_spots, spot_length, spot_width, spot_ranges)
+select id, 9, 5, 5.00, 2.20, '[{"from":1,"to":5,"type":"moto"},{"from":6,"to":14,"type":"car"}]'::jsonb from public.condominiums where name = 'Roseno Lopes'
 on conflict (condominium_id) do update
   set car_spots = excluded.car_spots, moto_spots = excluded.moto_spots,
-      spot_length = excluded.spot_length, spot_width = excluded.spot_width, updated_at = now();
+      spot_length = excluded.spot_length, spot_width = excluded.spot_width,
+      spot_ranges = excluded.spot_ranges, updated_at = now();
 
 with cond as (select id from public.condominiums where name = 'Roseno Lopes'),
 v(unit, vtype, model, plate, color, len, wid, spot) as (values

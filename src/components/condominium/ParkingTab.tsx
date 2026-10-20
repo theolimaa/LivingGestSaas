@@ -21,6 +21,7 @@ import { useTenants } from '@/hooks/useTenants';
 import {
   ParkingCustomField,
   ParkingSettingsDB,
+  ParkingSpotRange,
   ParkingVehicleDB,
   VehicleType,
   useDeleteParkingVehicle,
@@ -211,6 +212,7 @@ function SettingsModal({
   const [spotLength, setSpotLength] = useState(fmtNum(settings.spot_length));
   const [spotWidth, setSpotWidth] = useState(fmtNum(settings.spot_width));
   const [fields, setFields] = useState<ParkingCustomField[]>(settings.custom_fields);
+  const [ranges, setRanges] = useState<ParkingSpotRange[]>(settings.spot_ranges);
 
   function addField() {
     setFields([...fields, { key: `f_${Date.now().toString(36)}`, label: '', type: 'text' }]);
@@ -223,6 +225,7 @@ function SettingsModal({
       moto_spots: Math.max(0, parseInt(motoSpots) || 0),
       spot_length: parseNum(spotLength),
       spot_width: parseNum(spotWidth),
+      spot_ranges: ranges.filter(r => r.from >= 1 && r.to >= r.from),
       custom_fields: fields.filter(f => f.label.trim()).map(f => ({ ...f, label: f.label.trim() })),
     });
     onClose();
@@ -251,6 +254,39 @@ function SettingsModal({
             <div>
               <Label>Largura da vaga (m)</Label>
               <Input className="mt-1" inputMode="decimal" value={spotWidth} onChange={e => setSpotWidth(e.target.value)} placeholder="2,20" />
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <Label>Faixas de vagas</Label>
+                <p className="text-xs text-muted-foreground">Define quais números de vaga são de carro e quais são de moto. Quando preenchido, o mapa e os totais usam as faixas.</p>
+              </div>
+              <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => setRanges([...ranges, { from: 1, to: 1, type: 'car' }])}>
+                <Plus className="w-3 h-3" /> Faixa
+              </Button>
+            </div>
+            {ranges.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma faixa definida.</p>}
+            <div className="space-y-2">
+              {ranges.map((r, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Vagas</span>
+                  <Input className="w-20" type="number" min={1} value={r.from} onChange={e => setRanges(ranges.map((x, j) => (j === i ? { ...x, from: parseInt(e.target.value) || 0 } : x)))} />
+                  <span className="text-sm text-muted-foreground">a</span>
+                  <Input className="w-20" type="number" min={1} value={r.to} onChange={e => setRanges(ranges.map((x, j) => (j === i ? { ...x, to: parseInt(e.target.value) || 0 } : x)))} />
+                  <Select value={r.type} onValueChange={v => setRanges(ranges.map((x, j) => (j === i ? { ...x, type: v as ParkingSpotRange['type'] } : x)))}>
+                    <SelectTrigger className="w-28 shrink-0"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="car">Carro</SelectItem>
+                      <SelectItem value="moto">Moto</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <button type="button" onClick={() => setRanges(ranges.filter((_, j) => j !== i))} className="p-2 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -330,7 +366,12 @@ function ParkingMap({
 
   // Vagas físicas: 1..N (N = maior entre as vagas configuradas e o maior nº em uso) + rótulos não numéricos em uso
   const numericUsed = [...bySpot.keys()].map(Number).filter(n => Number.isInteger(n) && n > 0);
-  const total = Math.max(settings.car_spots, settings.moto_spots, ...numericUsed, 0);
+  const rangeMax = settings.spot_ranges.map(r => r.to);
+  const total = Math.max(settings.car_spots, settings.moto_spots, ...numericUsed, ...rangeMax, 0);
+  const spotType = (label: string): 'car' | 'moto' | null => {
+    const n = Number(label);
+    return settings.spot_ranges.find(r => n >= r.from && n <= r.to)?.type ?? null;
+  };
   const labels = [
     ...Array.from({ length: total }, (_, i) => String(i + 1)),
     ...[...bySpot.keys()].filter(k => !/^\d+$/.test(k) || Number(k) < 1),
@@ -393,7 +434,15 @@ function ParkingMap({
                   parts.length ? 'border-border' : 'border-dashed border-border bg-muted/20'
                 }`}
               >
-                <div className="text-[11px] font-bold px-2 pt-1 text-muted-foreground">Vaga {label}</div>
+                <div className="text-[11px] font-bold px-2 pt-1 text-muted-foreground flex items-center justify-between">
+                  <span>Vaga {label}</span>
+                  {spotType(label) && (
+                    <span className="font-normal inline-flex items-center gap-0.5">
+                      {spotType(label) === 'moto' ? <Bike className="w-3 h-3" /> : <Car className="w-3 h-3" />}
+                      {spotType(label) === 'moto' ? 'moto' : 'carro'}
+                    </span>
+                  )}
+                </div>
                 {parts.length ? (
                   <div className="flex flex-1 divide-x divide-background">
                     {parts.map(([v, k]) => <Half key={v.id} v={v} kind={k} />)}
@@ -462,14 +511,22 @@ export default function ParkingTab({
 
   if (!settings) return null;
 
-  const cars = vehicles.filter(v => v.vehicle_type === 'car').length;
-  const motos = vehicles.filter(v => v.vehicle_type === 'moto').length;
+  const usedSpots = new Set(vehicles.map(v => v.spot_number?.trim()).filter(Boolean));
+  const spotsOfType = (t: 'car' | 'moto') =>
+    settings.spot_ranges.filter(r => r.type === t).flatMap(r => Array.from({ length: Math.max(0, r.to - r.from + 1) }, (_, i) => String(r.from + i)));
+  const hasRanges = settings.spot_ranges.length > 0;
+  const carSpotList = spotsOfType('car');
+  const motoSpotList = spotsOfType('moto');
+  const cars = hasRanges ? carSpotList.filter(s => usedSpots.has(s)).length : vehicles.filter(v => v.vehicle_type === 'car').length;
+  const motos = hasRanges ? motoSpotList.filter(s => usedSpots.has(s)).length : vehicles.filter(v => v.vehicle_type === 'moto').length;
+  const carTotal = hasRanges ? carSpotList.length : settings.car_spots;
+  const motoTotal = hasRanges ? motoSpotList.length : settings.moto_spots;
   const aptsWithCar = new Set(vehicles.filter(v => v.vehicle_type === 'car' && v.apartment_id).map(v => v.apartment_id)).size;
   const aptsWithMoto = new Set(vehicles.filter(v => v.vehicle_type === 'moto' && v.apartment_id).map(v => v.apartment_id)).size;
   const totalApts = apartments.length;
   const pct = (n: number) => (totalApts ? Math.round((n / totalApts) * 100) : 0);
-  const freeCars = settings.car_spots - cars;
-  const freeMotos = settings.moto_spots - motos;
+  const freeCars = carTotal - cars;
+  const freeMotos = motoTotal - motos;
 
   const q = search.trim().toLowerCase();
   const filtered = vehicles
@@ -496,13 +553,13 @@ export default function ParkingTab({
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="stat-card">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 relative z-10">Vagas de carro</p>
-          <p className="text-2xl font-bold relative z-10">{cars}<span className="text-base text-muted-foreground">/{settings.car_spots}</span></p>
-          <p className={`text-xs mt-1 relative z-10 ${freeCars < 0 ? 'text-destructive' : 'text-muted-foreground'}`}>{freeBadge(freeCars, settings.car_spots)}</p>
+          <p className="text-2xl font-bold relative z-10">{cars}<span className="text-base text-muted-foreground">/{carTotal}</span></p>
+          <p className={`text-xs mt-1 relative z-10 ${freeCars < 0 ? 'text-destructive' : 'text-muted-foreground'}`}>{freeBadge(freeCars, carTotal)}</p>
         </div>
         <div className="stat-card">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 relative z-10">Vagas de moto</p>
-          <p className="text-2xl font-bold relative z-10">{motos}<span className="text-base text-muted-foreground">/{settings.moto_spots}</span></p>
-          <p className={`text-xs mt-1 relative z-10 ${freeMotos < 0 ? 'text-destructive' : 'text-muted-foreground'}`}>{freeBadge(freeMotos, settings.moto_spots)}</p>
+          <p className="text-2xl font-bold relative z-10">{motos}<span className="text-base text-muted-foreground">/{motoTotal}</span></p>
+          <p className={`text-xs mt-1 relative z-10 ${freeMotos < 0 ? 'text-destructive' : 'text-muted-foreground'}`}>{freeBadge(freeMotos, motoTotal)}</p>
         </div>
         <div className="stat-card">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 relative z-10">Aptos com carro</p>

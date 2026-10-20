@@ -12,12 +12,19 @@ export interface ParkingCustomField {
   type: CustomFieldType;
 }
 
+export interface ParkingSpotRange {
+  from: number;
+  to: number;
+  type: 'car' | 'moto';
+}
+
 export interface ParkingSettingsDB {
   condominium_id: string;
   car_spots: number;
   moto_spots: number;
   spot_length: number | null;
   spot_width: number | null;
+  spot_ranges: ParkingSpotRange[];
   custom_fields: ParkingCustomField[];
 }
 
@@ -45,6 +52,7 @@ export const DEFAULT_PARKING_SETTINGS = (condominiumId: string): ParkingSettings
   moto_spots: 0,
   spot_length: null,
   spot_width: null,
+  spot_ranges: [],
   custom_fields: [],
 });
 
@@ -63,6 +71,7 @@ export function useParkingSettings(condominiumId?: string) {
       return {
         ...data,
         custom_fields: Array.isArray(data.custom_fields) ? (data.custom_fields as unknown as ParkingCustomField[]) : [],
+        spot_ranges: Array.isArray(data.spot_ranges) ? (data.spot_ranges as unknown as ParkingSpotRange[]) : [],
       } as ParkingSettingsDB;
     },
     enabled: !!user && !!condominiumId,
@@ -75,7 +84,7 @@ export function useSaveParkingSettings() {
     mutationFn: async (s: ParkingSettingsDB) => {
       const { error } = await supabase
         .from('parking_settings')
-        .upsert({ ...s, custom_fields: s.custom_fields as unknown as never, updated_at: new Date().toISOString() });
+        .upsert({ ...s, custom_fields: s.custom_fields as unknown as never, spot_ranges: s.spot_ranges as unknown as never, updated_at: new Date().toISOString() });
       if (error) throw error;
     },
     onSuccess: (_, s) => {

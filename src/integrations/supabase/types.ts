@@ -422,6 +422,7 @@ export type Database = {
           custom_fields: Json
           moto_spots: number
           spot_length: number | null
+          spot_ranges: Json
           spot_width: number | null
           updated_at: string
         }
@@ -431,6 +432,7 @@ export type Database = {
           custom_fields?: Json
           moto_spots?: number
           spot_length?: number | null
+          spot_ranges?: Json
           spot_width?: number | null
           updated_at?: string
         }
@@ -440,6 +442,7 @@ export type Database = {
           custom_fields?: Json
           moto_spots?: number
           spot_length?: number | null
+          spot_ranges?: Json
           spot_width?: number | null
           updated_at?: string
         }
