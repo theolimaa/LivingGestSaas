@@ -334,6 +334,12 @@ export default function CondominiumDetail() {
           </div>
         </div>
  
+        <Tabs defaultValue="apartments" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="apartments">Apartamentos</TabsTrigger>
+          <TabsTrigger value="parking">Estacionamento</TabsTrigger>
+        </TabsList>
+        <TabsContent value="apartments" className="space-y-4 mt-0">
         {/* Summary */}
         <div className="grid grid-cols-3 gap-3 stagger-children">
           <div className="stat-card stat-card-primary">
@@ -354,13 +360,6 @@ export default function CondominiumDetail() {
             <p className="text-2xl font-bold relative z-10">{selectedYear}</p>
           </div>
         </div>
- 
-        <Tabs defaultValue="apartments" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="apartments">Apartamentos</TabsTrigger>
-          <TabsTrigger value="parking">Estacionamento</TabsTrigger>
-        </TabsList>
-        <TabsContent value="apartments" className="space-y-4 mt-0">
         {/* Search bar */}
         {!isLoading && condApts.length > 0 && (
           <div className="relative">
