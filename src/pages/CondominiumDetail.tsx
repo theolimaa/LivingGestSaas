@@ -36,7 +36,9 @@ import {
 import { useTenants } from '@/hooks/useTenants';
 import { useAllFinancialRecords, calcReceived, FinancialRecordDB } from '@/hooks/useFinancial';
 import { useContracts } from '@/hooks/useContracts';
- 
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import ParkingTab from '@/components/condominium/ParkingTab';
+
 function ApartmentModal({
   open,
   onClose,
@@ -353,6 +355,12 @@ export default function CondominiumDetail() {
           </div>
         </div>
  
+        <Tabs defaultValue="apartments" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="apartments">Apartamentos</TabsTrigger>
+          <TabsTrigger value="parking">Estacionamento</TabsTrigger>
+        </TabsList>
+        <TabsContent value="apartments" className="space-y-4 mt-0">
         {/* Search bar */}
         {!isLoading && condApts.length > 0 && (
           <div className="relative">
@@ -413,8 +421,13 @@ export default function CondominiumDetail() {
             ))}
           </div>
         )}
+        </TabsContent>
+        <TabsContent value="parking" className="mt-0">
+          {id && <ParkingTab condominiumId={id} apartments={condApts} />}
+        </TabsContent>
+        </Tabs>
       </div>
- 
+
       <ApartmentModal
         open={showAdd}
         onClose={() => setShowAdd(false)}

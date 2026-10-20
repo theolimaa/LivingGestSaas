@@ -415,6 +415,107 @@ export type Database = {
           },
         ]
       }
+      parking_settings: {
+        Row: {
+          car_spots: number
+          condominium_id: string
+          custom_fields: Json
+          moto_spots: number
+          spot_length: number | null
+          spot_width: number | null
+          updated_at: string
+        }
+        Insert: {
+          car_spots?: number
+          condominium_id: string
+          custom_fields?: Json
+          moto_spots?: number
+          spot_length?: number | null
+          spot_width?: number | null
+          updated_at?: string
+        }
+        Update: {
+          car_spots?: number
+          condominium_id?: string
+          custom_fields?: Json
+          moto_spots?: number
+          spot_length?: number | null
+          spot_width?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parking_settings_condominium_id_fkey"
+            columns: ["condominium_id"]
+            isOneToOne: true
+            referencedRelation: "condominiums"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      parking_vehicles: {
+        Row: {
+          apartment_id: string | null
+          color: string | null
+          condominium_id: string
+          created_at: string
+          extra: Json
+          id: string
+          length_m: number | null
+          model: string | null
+          notes: string | null
+          plate: string | null
+          spot_number: string | null
+          vehicle_type: string
+          width_m: number | null
+        }
+        Insert: {
+          apartment_id?: string | null
+          color?: string | null
+          condominium_id: string
+          created_at?: string
+          extra?: Json
+          id?: string
+          length_m?: number | null
+          model?: string | null
+          notes?: string | null
+          plate?: string | null
+          spot_number?: string | null
+          vehicle_type?: string
+          width_m?: number | null
+        }
+        Update: {
+          apartment_id?: string | null
+          color?: string | null
+          condominium_id?: string
+          created_at?: string
+          extra?: Json
+          id?: string
+          length_m?: number | null
+          model?: string | null
+          notes?: string | null
+          plate?: string | null
+          spot_number?: string | null
+          vehicle_type?: string
+          width_m?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parking_vehicles_apartment_id_fkey"
+            columns: ["apartment_id"]
+            isOneToOne: false
+            referencedRelation: "apartments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "parking_vehicles_condominium_id_fkey"
+            columns: ["condominium_id"]
+            isOneToOne: false
+            referencedRelation: "condominiums"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       previous_tenants: {
         Row: {
           apartment_id: string | null
